@@ -6,7 +6,7 @@
 #define THREADPOOL_LOGGER_H
 #include <glog/logging.h>
 #include <string>
-#define EXECUTABLE_NAME "ThreadPool"
+#define EXECUTABLE_NAME "http_server"
 #define LOG_DIR "../logs/"
 class Logger {
 private:
@@ -15,7 +15,6 @@ private:
         this->dir = dir;
         this->executable_name = executable_name;
         std::string info_dir = dir + "info_log";
-        std::cout << info_dir << std::endl;
         google::SetLogDestination(google::GLOG_INFO, info_dir.c_str());
         std::string warning_dir = dir + "warning_log";
         google::SetLogDestination(google::GLOG_WARNING, warning_dir.c_str());
