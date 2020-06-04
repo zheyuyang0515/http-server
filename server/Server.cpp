@@ -153,16 +153,16 @@ void Server::Listen() {
                     exit(-1);
                 }
                 //set client's event
-                event.events = EPOLLIN | EPOLLERR;
-                struct client_struct *cs;
+                event.events = EPOLLIN | EPOLLERR | EPOLLET;
+                struct client_struct *cs = new client_struct();
                 cs->client_fd = client_fd;
                 cs->clientaddr = clientaddr;
                 event.data.ptr = cs;
                 ret = epoll_ctl(epfd, EPOLL_CTL_ADD, client_fd, &event);
                 if(ret == -1) {
                     error_msg = strerror(errno);
-                    logger->logging_error("Server: Add epoll server fd failed(" + std::string(error_msg) + ").");
-                    perror("Server: Add epoll server fd failed.");
+                    logger->logging_error("Server: Add epoll client fd(1st time) failed(" + std::string(error_msg) + ").");
+                    perror("Server: Add epoll client fd(1st time) failed.");
                     exit(-1);
                 }
                 logger->logging_info("Server: Incoming new connection. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ".");
@@ -192,12 +192,13 @@ void Server::Listen() {
                 logger->logging_info("Server: Recv Request from a client. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ".");
                 std::cout << "Server: Recv Request from a client. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + "." << std::endl;
                 Task *task = new Task(Server::handle_request, ts);
-                //add task to the queue
-                pool->add_task(task);
-                ret = epoll_ctl(epfd, EPOLL_CTL_DEL, ((struct client_struct *)events[i].data.ptr)->client_fd, NULL);
+                //remove client descriptor from epoll
+                /*ret = epoll_ctl(epfd, EPOLL_CTL_DEL, ((struct client_struct *)events[i].data.ptr)->client_fd, NULL);
                 if(ret == -1) {
                     logger->logging_warning("Server: Remove fd from epfd(" + std::string(error_msg) + ").");
-                }
+                }*/
+                //add task to the queue
+                pool->add_task(task);
             }
         }
 
@@ -242,6 +243,7 @@ char* Server::readn(int n, struct client_struct *cs, Logger *logger, int epfd) {
 }
 
 void Server::handle_request(void *arg) {
+    std::cout << "handle_request" << std::endl;
     int ret = -1;
     struct task_struct *ts = (struct task_struct *)arg;
     struct client_struct *cs = ts->cs;
@@ -258,15 +260,14 @@ void Server::handle_request(void *arg) {
     if(in_buff != nullptr) {
         std::cout << "recv: " << in_buff << std::endl;
         send(cs->client_fd, msg.c_str(), msg.length(), 0);
-        event.events = EPOLLIN | EPOLLERR;
+        /*event.events = EPOLLIN | EPOLLERR;
         event.data.ptr = cs;
         ret = epoll_ctl(epfd, EPOLL_CTL_ADD, cs->client_fd, &event);
         if(ret == -1) {
             error_msg = strerror(errno);
-            logger->logging_error("Server: Add epoll server fd failed(" + std::string(error_msg) + ").");
-            perror("Server: Add epoll server fd failed");
-            exit(-1);
-        }
+            logger->logging_warning("Server: Add epoll client fd failed(" + std::string(error_msg) + ").");
+            perror("Server: Add epoll client fd failed");
+        }*/
     }
     delete in_buff;
 }
