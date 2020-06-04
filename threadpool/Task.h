@@ -13,7 +13,7 @@ public:
     void *arg;   //argument of the callback function
     void (*func)(void *arg);   //callback function
 public:
-    Task(void (*func)(void * arg), void *arg);
+    Task(void (*func)(void *), void *arg);
     /**
      * constructor to initiate dummy nodes
      */

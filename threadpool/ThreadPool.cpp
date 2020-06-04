@@ -144,7 +144,7 @@ void * Manager::init_manager(void *arg) {
         sleep(DEFAULT_SLEEP_TIME);
         float busy_thread_num = pool->busy_thread_num;
         float workers_num = pool->workers_num;
-        logger->logging_info("Manager: " + std::to_string(pthread_self()) + " number of busy threads: " + std::to_string(pool->busy_thread_num) + " number of total threads: " + std::to_string(pool->workers_num) + ".");
+        logger->logging_info("Manager: " + std::to_string(pthread_self()) + " number of busy threads: " + std::to_string(busy_thread_num) + " number of total threads: " + std::to_string(workers_num) + ".");
         //add thread
         if(busy_thread_num / workers_num > ADD_THREAD_RATE && workers_num + pool->add_step <= pool->max_thread_num) {
             logger->logging_info("Manager: " + std::to_string(pthread_self()) + " add new threads: " + std::to_string(pool->add_step));
