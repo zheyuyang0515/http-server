@@ -9,7 +9,7 @@
 #include "Task.h"
 #include <unistd.h>
 #include "../logger/Logger.h"
-#include "../Util/Utility.h"
+#include "../util/Utility.h"
 #define DEFAULT_SLEEP_TIME 10       //adjust the number of worker every this seconds
 #define ADD_THREAD_RATE 0.8         //add new threads into the pool when (the number of busy threads in the pool) / (the number of threads in the pool) >= this rate
 #define DEL_THREAD_RATE 0.3         //remove threads from the pool when(the number of busy threads in the pool) / (the number of threads in the pool) <= this rate

@@ -3,6 +3,7 @@
 //
 
 #include "Logger.h"
+
 void Logger::add_log(Log *log) {
     if(log->level <= level) return;
     pthread_mutex_lock(&log_mutex);
@@ -19,7 +20,9 @@ Log* Logger::remove_log() {
 void* Logger::init_logger(void *arg){
     Logger *logger = (Logger *)arg;
     std::ofstream out;
+    //open log file
     out.open(logger->dir, std::ios::out | std::ios::app);
+    //used to convert enum to string
     std::string levels[] = {"", "DEBUG", "INFO", "WARNING", "ERROR", "FATAL"};
     while(true) {
         pthread_mutex_lock(&logger->log_mutex);
