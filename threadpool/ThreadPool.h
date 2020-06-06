@@ -9,6 +9,7 @@
 #include "Task.h"
 #include <unistd.h>
 #include "../logger/Logger.h"
+#include "../Util/Utility.h"
 #define DEFAULT_SLEEP_TIME 10       //adjust the number of worker every this seconds
 #define ADD_THREAD_RATE 0.8         //add new threads into the pool when (the number of busy threads in the pool) / (the number of threads in the pool) >= this rate
 #define DEL_THREAD_RATE 0.3         //remove threads from the pool when(the number of busy threads in the pool) / (the number of threads in the pool) <= this rate
@@ -77,25 +78,9 @@ public:
     int min_thread_num, max_thread_num, add_step;
     int delete_thread_num;      //number of threads need to be deleted at present
     int busy_thread_num;        //number of busy thread
+    bool terminate;             //indicate if the threadpool needs to be terminated
 
 public:
-    /**
-     * add a node to the tail of the queue
-     * @param node: the node which needs to be added into the queue
-     * @param nodes: the tail dummy node of a list
-     */
-    template <class T>
-    static void add_node(T *node, T *nodes);
-
-    /**
-     * remove and return node from the head of the queue
-     * @tparam T
-     * @param head: the head dummy node of a list
-     * @param tail: the tail dummy node of a list
-     * @return: the removed node
-     */
-    template<class T>
-    static T* remove_node(T *head, T *tail);
 
     /**
      * add a task into the queue
