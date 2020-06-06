@@ -6,11 +6,11 @@
 #define HTTP_SERVER_LOG_H
 
 #include <string>
-enum Level {
-    ALL, DEBUG, INFO, WARNING, ERROR, FATAL
-};
 class Log {
 public:
+    enum Level {
+        ALL, DEBUG, INFO, WARNING, ERROR, FATAL
+    };
     Log *prev;
     Log *next;
     std::string content;

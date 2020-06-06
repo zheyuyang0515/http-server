@@ -7,7 +7,7 @@
 #define PORT 8686
 int main(int argc, char* argv[]) {
     //init logger singleton(indicate log file directory and ignorance of severity)
-    Logger *logger = Logger::get_instance(LOG_DIR, INFO);
+    Logger *logger = Logger::get_instance(LOG_DIR, Log::ALL);
     //init threadpool
     ThreadPool *pool = new ThreadPool(4, 4, 1);
     //init server

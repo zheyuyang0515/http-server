@@ -19,12 +19,12 @@
 class Logger {
 private:
     std::string dir;
-    Level level;
+    Log::Level level;
     int log_sum;
     Log *dummy;
     Log *tail;
     static void* init_logger(void *arg);
-    Logger(std::string dir, Level level) {
+    Logger(std::string dir, Log::Level level) {
         this->dummy = new Log();
         this->tail = new Log();
         this->dummy->next = tail;
@@ -52,7 +52,7 @@ public:
      * @param level: ignore the severity which equals or lower than this argument
      * @return logger instance pointer
      */
-    static Logger* get_instance(std::string dir, Level level) {
+    static Logger* get_instance(std::string dir, Log::Level level) {
         static Logger logger(dir, level);
         return &logger;
     }
