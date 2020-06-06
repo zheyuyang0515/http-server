@@ -16,13 +16,13 @@ Server::Server(std::string ip, int port, int max_request, ThreadPool *pool) {
     int opt_status = 1;        //option used in setsockopt()
 
     //initiate logger obj
-    logger = Logger::get_instance(LOG_DIR, ALL);
+    logger = Logger::get_instance(LOG_DIR, Log::ALL);
 
     //create server socket
     socket_fd = socket(AF_INET, SOCK_STREAM, 0);
     if(socket_fd == -1) {
         error_msg = strerror(errno);
-        logger->add_log(new Log("Server: Create socket failed(" + std::string(error_msg) + ").", ERROR));
+        logger->add_log(new Log("Server: Create socket failed(" + std::string(error_msg) + ").", Log::ERROR));
         perror("Server: Create socket failed.");
         exit(-1);
     }
@@ -31,14 +31,14 @@ Server::Server(std::string ip, int port, int max_request, ThreadPool *pool) {
     int flags = fcntl(socket_fd, F_GETFL, 0);
     if(flags == -1) {
         error_msg = strerror(errno);
-        logger->add_log(new Log("Server: Get socket descriptor failed(" + std::string(error_msg) + ").", ERROR));
+        logger->add_log(new Log("Server: Get socket descriptor failed(" + std::string(error_msg) + ").", Log::ERROR));
         perror("Server: Get socket descriptor failed.");
         exit(-1);
     }
     ret = fcntl(socket_fd, F_SETFL, flags | O_NONBLOCK);
     if(ret == -1) {
         error_msg = strerror(errno);
-        logger->add_log(new Log("Server: Set socket descriptor failed(" + std::string(error_msg) + ").", ERROR));
+        logger->add_log(new Log("Server: Set socket descriptor failed(" + std::string(error_msg) + ").", Log::ERROR));
         perror("Server: Set socket descriptor failed.");
         exit(-1);
     }
@@ -50,7 +50,7 @@ Server::Server(std::string ip, int port, int max_request, ThreadPool *pool) {
     ret = bind(socket_fd, (struct sockaddr *)&serveraddr, sizeof(struct sockaddr));
     if(ret == -1) {
         error_msg = strerror(errno);
-        logger->add_log(new Log("Server: Bind socket failed(" + std::string(error_msg) + ").", ERROR));
+        logger->add_log(new Log("Server: Bind socket failed(" + std::string(error_msg) + ").", Log::ERROR));
         perror("Server: Bind socket failed.");
         exit(-1);
     }
@@ -59,14 +59,14 @@ Server::Server(std::string ip, int port, int max_request, ThreadPool *pool) {
     ret = setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &opt_status, sizeof(opt_status));
     if(ret == -1) {
         error_msg = strerror(errno);
-        logger->add_log(new Log("Server: Set sock opt(reuseaddr) failed(" + std::string(error_msg) + ").", WARNING));
+        logger->add_log(new Log("Server: Set sock opt(reuseaddr) failed(" + std::string(error_msg) + ").", Log::WARNING));
         perror("Server: Set sock opt(reuseaddr) failed.");
         //this error does not have fatal effects to the program, so the program do not need to exit
     }
     ret = setsockopt(socket_fd, SOL_SOCKET, SO_REUSEPORT, &opt_status, sizeof(opt_status));
     if(ret == -1) {
         error_msg = strerror(errno);
-        logger->add_log(new Log("Server: Set sock opt(reuseport) failed(" + std::string(error_msg) + ").", WARNING));
+        logger->add_log(new Log("Server: Set sock opt(reuseport) failed(" + std::string(error_msg) + ").", Log::WARNING));
         perror("Server: Set sock opt(reuseaddr) failed.");
         //this error does not have fatal effects to the program, so the program do not need to exit
     }
@@ -75,7 +75,7 @@ Server::Server(std::string ip, int port, int max_request, ThreadPool *pool) {
     ret = listen(socket_fd, DEFAULT_LISTEN);
     if(ret == -1) {
         error_msg = strerror(errno);
-        logger->add_log(new Log("Server: Listen socket failed(" + std::string(error_msg) + ").", ERROR));
+        logger->add_log(new Log("Server: Listen socket failed(" + std::string(error_msg) + ").", Log::ERROR));
         perror("Server: Listen socket failed.");
         exit(-1);
     }
@@ -84,7 +84,7 @@ Server::Server(std::string ip, int port, int max_request, ThreadPool *pool) {
     epfd = epoll_create(128);
     if(epfd == -1) {
         error_msg = strerror(errno);
-        logger->add_log(new Log("Server: Create epoll fd failed(" + std::string(error_msg) + ").", ERROR));
+        logger->add_log(new Log("Server: Create epoll fd failed(" + std::string(error_msg) + ").", Log::ERROR));
         perror("Server: Create epoll fd failed.");
         exit(-1);
     }
@@ -95,15 +95,15 @@ Server::Server(std::string ip, int port, int max_request, ThreadPool *pool) {
     ret = epoll_ctl(epfd, EPOLL_CTL_ADD, socket_fd, &event);
     if(ret == -1) {
         error_msg = strerror(errno);
-        logger->add_log(new Log("Server: Add epoll server fd failed(" + std::string(error_msg) + ").", ERROR));
+        logger->add_log(new Log("Server: Add epoll server fd failed(" + std::string(error_msg) + ").", Log::ERROR));
         perror("Server: Add epoll server fd failed.");
         exit(-1);
     }
-    logger->add_log(new Log("Server: Initiate successfully. ip: " + ip + ", port: " + std::to_string(port), INFO));
+    logger->add_log(new Log("Server: Initiate successfully. ip: " + ip + ", port: " + std::to_string(port), Log::INFO));
 }
 
 void Server::Listen() {
-    logger->add_log(new Log("Server: Server start working, maximal number of requests the server could handle in one epoll_wait loop: " + std::to_string(max_request) + ".", DEBUG));
+    logger->add_log(new Log("Server: Server start working, maximal number of requests the server could handle in one epoll_wait loop: " + std::to_string(max_request) + ".", Log::DEBUG));
     struct epoll_event event, events[max_request];  //epoll structs
     int event_sum;      //total number of events in each epoll_wait call
     char *error_msg;    //error message
@@ -121,7 +121,7 @@ void Server::Listen() {
         //error
         if(event_sum == -1) {
             error_msg = strerror(errno);
-            logger->add_log(new Log("Server: epoll_wait failed(" + std::string(error_msg) + ").", ERROR));
+            logger->add_log(new Log("Server: epoll_wait failed(" + std::string(error_msg) + ").", Log::ERROR));
             perror("Server: epoll_wait failed.");
             exit(-1);
         }
@@ -133,7 +133,7 @@ void Server::Listen() {
                 client_fd = accept(socket_fd, (struct sockaddr *)&clientaddr, &socklen);
                 if(client_fd == -1) {
                     error_msg = strerror(errno);
-                    logger->add_log(new Log("Server: Accept new client failed(" + std::string(error_msg) + ").", ERROR));
+                    logger->add_log(new Log("Server: Accept new client failed(" + std::string(error_msg) + ").", Log::ERROR));
                     perror("Server: Accept new client failed.");
                     exit(-1);
                 }
@@ -141,14 +141,14 @@ void Server::Listen() {
                 int flags = fcntl(client_fd, F_GETFL, 0);
                 if(flags == -1) {
                     error_msg = strerror(errno);
-                    logger->add_log(new Log("Server: Get client descriptor failed(" + std::string(error_msg) + ").", ERROR));
+                    logger->add_log(new Log("Server: Get client descriptor failed(" + std::string(error_msg) + ").", Log::ERROR));
                     perror("Server: Get client descriptor failed.");
                     exit(-1);
                 }
                 ret = fcntl(client_fd, F_SETFL, flags | O_NONBLOCK);
                 if(ret == -1) {
                     error_msg = strerror(errno);
-                    logger->add_log(new Log("Server: Set client descriptor failed(" + std::string(error_msg) + ").", ERROR));
+                    logger->add_log(new Log("Server: Set client descriptor failed(" + std::string(error_msg) + ").", Log::ERROR));
                     perror("Server: Set client descriptor failed.");
                     exit(-1);
                 }
@@ -161,11 +161,11 @@ void Server::Listen() {
                 ret = epoll_ctl(epfd, EPOLL_CTL_ADD, client_fd, &event);
                 if(ret == -1) {
                     error_msg = strerror(errno);
-                    logger->add_log(new Log("Server: Add epoll client fd(1st time) failed(" + std::string(error_msg) + ").", ERROR));
+                    logger->add_log(new Log("Server: Add epoll client fd(1st time) failed(" + std::string(error_msg) + ").", Log::ERROR));
                     perror("Server: Add epoll client fd(1st time) failed.");
                     exit(-1);
                 }
-                logger->add_log(new Log("Server: Incoming new connection. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ".", INFO));
+                logger->add_log(new Log("Server: Incoming new connection. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ".", Log::INFO));
             } else {
                 //client closed
                 if(events[i].events & EPOLLERR) {
@@ -174,10 +174,10 @@ void Server::Listen() {
                     client_fd = cs->client_fd;
                     ret = epoll_ctl(epfd, EPOLL_CTL_DEL, client_fd, nullptr);
                     if(ret == -1) {
-                        logger->add_log(new Log("Server: Remove fd from epfd(" + std::string(error_msg) + ").", WARNING));
+                        logger->add_log(new Log("Server: Remove fd from epfd(" + std::string(error_msg) + ").", Log::WARNING));
                     }
                     close(client_fd);
-                    logger->add_log(new Log("Server: Client disconnected. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ".", INFO));
+                    logger->add_log(new Log("Server: Client disconnected. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ".", Log::INFO));
                     delete cs;
                     continue;
                 }
@@ -189,14 +189,8 @@ void Server::Listen() {
                 ts->cs->client_fd = ((struct client_struct *)events[i].data.ptr)->client_fd;
                 ts->cs->clientaddr = ((struct client_struct *)events[i].data.ptr)->clientaddr;
                 //create task object
-                logger->add_log(new Log("Server: Recv Request from a client. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ".", DEBUG));
-                //std::cout << "Server: Recv Request from a client. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + "." << std::endl;
+                logger->add_log(new Log("Server: Recv Request from a client. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ".", Log::DEBUG));
                 Task *task = new Task(Server::handle_request, ts);
-                //remove client descriptor from epoll
-                /*ret = epoll_ctl(epfd, EPOLL_CTL_DEL, ((struct client_struct *)events[i].data.ptr)->client_fd, nullptr);
-                if(ret == -1) {
-                    logger->logging_warning("Server: Remove fd from epfd(" + std::string(error_msg) + ").");
-                }*/
                 //add task to the queue
                 pool->add_task(task);
             }
@@ -226,15 +220,15 @@ char* Server::readn(int n, struct client_struct *cs, Logger *logger, int epfd) {
     //client closed or an error occurred(eagain and ewouldblock means resource temporarily unavailable, not an error)
     if(ret <= 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
         if(ret == 0) {
-            logger->add_log(new Log("Server: Client disconnected. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ".", INFO));
+            logger->add_log(new Log("Server: Client disconnected. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ".", Log::INFO));
         } else {
             error_msg = strerror(errno);
-            logger->add_log(new Log("Server: Recv data from client socket failed. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ". (" + std::string(error_msg) + ")", ERROR));
+            logger->add_log(new Log("Server: Recv data from client socket failed. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ". (" + std::string(error_msg) + ")", Log::ERROR));
         }
         ret = epoll_ctl(epfd, EPOLL_CTL_DEL, cs->client_fd, nullptr);
         if(ret == -1) {
             error_msg = strerror(errno);
-            logger->add_log(new Log("Server: Remove fd from epfd(" + std::string(error_msg) + ").", WARNING));
+            logger->add_log(new Log("Server: Remove fd from epfd(" + std::string(error_msg) + ").", Log::WARNING));
         }
         close(cs->client_fd);
         delete cs;
@@ -244,7 +238,6 @@ char* Server::readn(int n, struct client_struct *cs, Logger *logger, int epfd) {
 }
 
 void Server::handle_request(void *arg) {
-    //std::cout << "handle_request" << std::endl;
     int ret = -1;
     struct task_struct *ts = (struct task_struct *)arg;
     struct client_struct *cs = ts->cs;
@@ -254,21 +247,30 @@ void Server::handle_request(void *arg) {
     struct epoll_event event;
     char* error_msg;
     std::string msg = "received msg!";
+    //parse http request header
+}
 
-    //test
-    char *in_buff;
-    in_buff = readn(n, cs, logger, epfd);
-    if(in_buff != nullptr && strlen(in_buff) != 0) {
-        std::cout << "recv: " << in_buff << std::endl;
-        send(cs->client_fd, msg.c_str(), msg.length(), 0);
-        /*event.events = EPOLLIN | EPOLLERR;
-        event.data.ptr = cs;
-        ret = epoll_ctl(epfd, EPOLL_CTL_ADD, cs->client_fd, &event);
-        if(ret == -1) {
-            error_msg = strerror(errno);
-            logger->logging_warning("Server: Add epoll client fd failed(" + std::string(error_msg) + ").");
-            perror("Server: Add epoll client fd failed");
-        }*/
+int Server::parse_http_header(struct http_header_get_struct &header_struct, Server::client_struct *cs, Logger *logger, int epfd) {
+    std::unordered_map<std::string, std::string> header_map = header_struct.header_map;     //store header result
+    std::unordered_map<std::string, std::string> arg_map = header_struct.arg_map; //store arguments result
+    char* in_buff;    //temp read buffer
+    std::string key = "";   //key
+    std::string value = "";  //value
+    int count = 0;
+    std::string first_line_key[] = {"req_method", "req_url", "http_version"};
+    //read first line
+    while(true) {
+        in_buff = readn(1, cs, logger, epfd);
+        if(in_buff != nullptr || strlen(in_buff) <= 0 || strcmp(in_buff, "\r") == 0 || strcmp(in_buff, "\n") == 0) {
+            break;
+        }
+        if(strcmp(in_buff, " ") == 0 || strcmp(in_buff, "?")) {
+            header_map[first_line_key[count]] = value;
+            count++;
+        }
+        //TODO:parse first line: arguments, http_version
+
     }
-    delete in_buff;
+    //TODO:parse all http data
+    return 1;
 }

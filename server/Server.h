@@ -17,8 +17,11 @@
 #include <fcntl.h>
 #include <string.h>
 #include "../threadpool/Task.h"
+#include <unordered_map>
+
 class Server {
 private:
+    enum request_method {GET, POST};
     int socket_fd;      //server fd
     int epfd;           //epoll fd
     Logger *logger;     //logger
@@ -56,7 +59,23 @@ public:
      * @param ts: struct task_struct
      */
     static void handle_request(void *ts);
+private:
+    struct http_header_get_struct {
+        std::unordered_map<std::string, std::string> header_map;
+        std::unordered_map<std::string, std::string> arg_map;
+    };
+     /**
+      * @def parse http header information, and store the information in two hashmaps
+      * @param header_struct: store the header result
+      * @param cs: client structure to store client's information
+     * @param logger: logger instance
+     * @param epfd: Epoll fd
+      * @return : return 1 for success, -1 for error
+      */
+    int parse_http_header(struct http_header_get_struct &header_struct, struct client_struct *cs, Logger *logger, int epfd);
 };
+
+
 
 
 #endif //HTTP_SERVER_SERVER_H
