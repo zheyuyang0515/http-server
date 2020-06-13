@@ -93,7 +93,6 @@ void* Worker::init_worker(void *arg) {
         }
         logger->add_log(new Log("Worker: " + std::to_string(pthread_self()) + " get one task.", Log::INFO));
         pool->busy_thread_num++;
-        std::cout << 123 << std::endl;
         Task *task = Utility::remove_node(pool->tasks_head, pool->tasks_tail);
         if(task == nullptr) {
             pthread_mutex_unlock(&pool->lock);
