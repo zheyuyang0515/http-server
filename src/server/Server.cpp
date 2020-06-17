@@ -9,6 +9,7 @@
 #define HTML_DIR "../res/html"
 //init pic_type
 const std::unordered_set<std::string> Server::pic_type_set {"jpg", "jpeg", "gif", "ico", "png", "bmp"};
+const std::unordered_set<std::string> Server::text_type_set {"html", "css"};
 Server::Server(std::string ip, int port, int max_request, ThreadPool *pool) {
     this->max_request = max_request;
     this->pool = pool;
@@ -116,7 +117,6 @@ void Server::Listen() {
 
     while(true) {
         event_sum = epoll_wait(epfd, events, max_request, -1);
-        //std::cout << "event_sum: " << event_sum << std::endl;
         //no events found
         if(event_sum == 0) {
             continue;
@@ -221,64 +221,6 @@ int Server::readn(char* buff, int n, int client_fd) {
     }
     return n - nleft;
 }
-/*int Server::readn(char* buff, int n, struct client_struct *cs, Logger *logger, int epfd) {
-    //char in_buff[n + 1];
-    struct sockaddr_in clientaddr = cs->clientaddr;
-    char *error_msg;
-    //reset buffer
-    //memset(in_buff, 0, sizeof(in_buff));
-    memset(buff, 0, sizeof(buff));
-    int ret = -1;
-
-    //One recv might not be able to read enough length of chars
-    //do{
-    ret = recv(cs->client_fd, buff, n, 0);
-        //if(ret > 0) {
-            //strcat(result, in_buff);
-        //}
-    //} while(strlen(result) < n && (ret > 0 || errno == EINTR));
-    //std::cout << ret << std::endl;
-    //client closed or an error occurred(eagain and ewouldblock means resource temporarily unavailable, not an error)
-    if(ret <= 0 && errno != EWOULDBLOCK && errno != EAGAIN && errno != EINTR) {
-        if(ret == 0 || (errno != EWOULDBLOCK && errno != EAGAIN && errno != EINTR)) {
-            //std::cout << "readn start1" << std::endl;
-            logger->add_log(new Log("Server: Client disconnected. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ".", Log::INFO));
-            delete []buff;
-            return -1;
-        } else {
-            error_msg = strerror(errno);
-            //std::string str =  "Server: Recv data from client socket failed. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ". (" + std::string(error_msg) + ")";
-            //std::cout << error_msg << std::endl;
-            logger->add_log(new Log("Server: Recv data from client. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ". (" + std::string(error_msg) + ")", Log::INFO));
-            delete []buff;
-            buff = nullptr;
-            return 0;
-        }
-        //std::cout << "readn end" << std::endl;
-    }
-    //std::cout << result << std::endl;
-    //std::cout << "readn end" << std::endl;
-    return 1;
-}*/
-/*void Server::handle_request(void *arg) {
-    struct task_struct *ts = (struct task_struct *)arg;
-    struct client_struct *cs = ts->cs;
-    int client_fd = cs->client_fd;
-    Logger *logger = ts->logger;
-    char in_buff[250];
-    int ret = -1;
-    ret = recv(client_fd, in_buff, sizeof(in_buff), 0);
-    std::string out_buf = "HTTP/1.1 200 OK\r\n"
-                          "Content-Type: text/html\r\n"
-                          "Content-Length: 4\r\n"
-                          "\r\n"
-                          "<hr>";
-    if(ret > 0) {
-        std::cout << in_buff << std::endl;
-        send(client_fd, out_buf.c_str(), out_buf.length(), 0);
-        logger->add_log(new Log("New request", Log::INFO));
-    }
-}*/
 void Server::handle_request(void *arg) {
     int ret = -1;
     struct task_struct *ts = (struct task_struct *)arg;
@@ -295,18 +237,18 @@ void Server::handle_request(void *arg) {
             ret = epoll_ctl(epfd, EPOLL_CTL_DEL, cs->client_fd, nullptr);
             if(ret == -1) {
                 error_msg = strerror(errno);
-                //logger->add_log(new Log("Server: Remove fd from epfd(" + std::string(error_msg) + ").", Log::WARNING));
+                logger->add_log(new Log("Server: Remove fd from epfd(" + std::string(error_msg) + ").", Log::WARNING));
             }
             close(cs->client_fd);
-            //free_http_header_get_struct(header_struct);
             break;
         }
         std::unordered_map<std::string, std::string>::iterator it;  //map iterator
         std::string req_method = "UNKNOWN";
         std::string req_url = "UNKNOWN";
         std::string user_agent = "UNKNOWN";
+        std::string suffix = header_struct.header_map["suffix"];
         //picture
-        if((it = header_struct.header_map.find("suffix")) != header_struct.header_map.end() && pic_type_set.count(it->second) > 0) {
+        if(pic_type_set.count(suffix) > 0) {
             ret = http_response(PIC_DIR, header_struct.header_map, cs, logger, Server::PIC);
             if(ret == -1) {
                 ret = epoll_ctl(epfd, EPOLL_CTL_DEL, cs->client_fd, nullptr);
@@ -318,15 +260,9 @@ void Server::handle_request(void *arg) {
                 //free_http_header_get_struct(header_struct);
                 break;
             }
-        } else {
-            //HTML
+        } else if(suffix.length() == 0 || text_type_set.count(suffix) > 0) {
+            //text
             ret = http_response(HTML_DIR, header_struct.header_map, cs, logger, Server::HTML);
-            /*std::string out_buf = "HTTP/1.1 200 OK\r\n"
-                                  "Content-Type: text/html\r\n"
-                                  "Content-Length: 4\r\n"
-                                  "\r\n"
-                                  "<hr>";
-            ret = send(cs->client_fd, out_buf.c_str(), out_buf.length(), 0);*/
             if(ret == -1) {
                 ret = epoll_ctl(epfd, EPOLL_CTL_DEL, cs->client_fd, nullptr);
                 if(ret == -1) {

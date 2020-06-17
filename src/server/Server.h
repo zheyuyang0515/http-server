@@ -31,6 +31,7 @@ private:
     int max_request;    //maximal number of requests the server could handle in one epoll_wait loop
     ThreadPool *pool;   //thread pool
     static const std::unordered_set<std::string> pic_type_set;    //save all pic suffix(bmp, jpeg, png, gif, jpg, ico)
+    static const std::unordered_set<std::string> text_type_set;    //save all pic suffix(html, css)
 public:
     /**
      * Constructor
