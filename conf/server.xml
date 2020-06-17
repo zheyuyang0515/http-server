@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<server>
+    <general>
+        <listen-ip>192.168.1.111</listen-ip>
+        <listen-port>8686</listen-port>
+        <max-connection>128</max-connection>
+    </general>
+    <worker>
+        <min-worker>1</min-worker>
+        <max-worker>4</max-worker>
+        <add-step>1</add-step>
+        <modify-time>30</modify-time>
+    </worker>
+    <page>
+        <main-page>index.html</main-page>
+        <error-404-page>404.html</error-404-page>
+    </page>
+</server>
