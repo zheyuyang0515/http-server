@@ -1,7 +1,7 @@
 #include <iostream>
-#include "server/Server.h"
-#include "logger/Logger.h"
-#include "util/Utility.h"
+#include "src/server/Server.h"
+#include "src/logger/Logger.h"
+#include "src/util/Utility.h"
 #define IPADDR "192.168.1.111"
 //#define IPADDR "127.0.0.1"
 #define PORT 8686
