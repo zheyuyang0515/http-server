@@ -201,37 +201,84 @@ void Server::Listen() {
 
     }
 }
-
-char* Server::readn(int n, struct client_struct *cs, Logger *logger, int epfd) {
-    char in_buff[n + 1];
-    char *result = new char[n + 1];
+int Server::readn(char* buff, int n, int client_fd) {
+    int nleft = n;
+    int count = 0;
+    while(nleft > 0) {
+        if((count = recv(client_fd, buff, nleft, 0)) < 0) {
+            if(errno == EINTR) {
+                count = 0;
+            } else if(errno == EWOULDBLOCK || errno == EAGAIN) {
+                return -2;
+            } else {
+                return -1;
+            }
+        } else if(count == 0) {
+            break;
+        }
+        nleft -= count;
+        buff += count;
+    }
+    return n - nleft;
+}
+/*int Server::readn(char* buff, int n, struct client_struct *cs, Logger *logger, int epfd) {
+    //char in_buff[n + 1];
     struct sockaddr_in clientaddr = cs->clientaddr;
     char *error_msg;
     //reset buffer
-    memset(in_buff, 0, sizeof(in_buff));
-    memset(result, 0, sizeof(result));
+    //memset(in_buff, 0, sizeof(in_buff));
+    memset(buff, 0, sizeof(buff));
     int ret = -1;
 
     //One recv might not be able to read enough length of chars
-    do{
-        ret = recv(cs->client_fd, in_buff, n, 0);
-        if(ret > 0) {
-            strcat(result, in_buff);
-        }
-    } while(strlen(result) < n && (ret > 0 || errno == EINTR));
+    //do{
+    ret = recv(cs->client_fd, buff, n, 0);
+        //if(ret > 0) {
+            //strcat(result, in_buff);
+        //}
+    //} while(strlen(result) < n && (ret > 0 || errno == EINTR));
+    //std::cout << ret << std::endl;
     //client closed or an error occurred(eagain and ewouldblock means resource temporarily unavailable, not an error)
-    if(ret == 0 || (ret < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
-        if(ret == 0) {
+    if(ret <= 0 && errno != EWOULDBLOCK && errno != EAGAIN && errno != EINTR) {
+        if(ret == 0 || (errno != EWOULDBLOCK && errno != EAGAIN && errno != EINTR)) {
+            //std::cout << "readn start1" << std::endl;
             logger->add_log(new Log("Server: Client disconnected. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ".", Log::INFO));
+            delete []buff;
+            return -1;
         } else {
             error_msg = strerror(errno);
-            logger->add_log(new Log("Server: Recv data from client socket failed. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ". (" + std::string(error_msg) + ")", Log::ERROR));
+            //std::string str =  "Server: Recv data from client socket failed. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ". (" + std::string(error_msg) + ")";
+            //std::cout << error_msg << std::endl;
+            logger->add_log(new Log("Server: Recv data from client. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ". (" + std::string(error_msg) + ")", Log::INFO));
+            delete []buff;
+            buff = nullptr;
+            return 0;
         }
-        return nullptr;
+        //std::cout << "readn end" << std::endl;
     }
-    return result;
-}
-
+    //std::cout << result << std::endl;
+    //std::cout << "readn end" << std::endl;
+    return 1;
+}*/
+/*void Server::handle_request(void *arg) {
+    struct task_struct *ts = (struct task_struct *)arg;
+    struct client_struct *cs = ts->cs;
+    int client_fd = cs->client_fd;
+    Logger *logger = ts->logger;
+    char in_buff[250];
+    int ret = -1;
+    ret = recv(client_fd, in_buff, sizeof(in_buff), 0);
+    std::string out_buf = "HTTP/1.1 200 OK\r\n"
+                          "Content-Type: text/html\r\n"
+                          "Content-Length: 4\r\n"
+                          "\r\n"
+                          "<hr>";
+    if(ret > 0) {
+        std::cout << in_buff << std::endl;
+        send(client_fd, out_buf.c_str(), out_buf.length(), 0);
+        logger->add_log(new Log("New request", Log::INFO));
+    }
+}*/
 void Server::handle_request(void *arg) {
     int ret = -1;
     struct task_struct *ts = (struct task_struct *)arg;
@@ -241,31 +288,26 @@ void Server::handle_request(void *arg) {
     char* error_msg;
     do{
         //parse http request header
-        struct http_header_get_struct *header_struct = new http_header_get_struct();
-        header_struct->header_map = new std::unordered_map<std::string, std::string>;
-        header_struct->arg_map = new std::unordered_map<std::string, std::string>;
-        ret = Server::parse_http_header(header_struct, cs, logger, epfd);
+        struct http_header_get_struct header_struct;
+        ret = Server::parse_http_header(&header_struct, cs, logger, epfd);
         if(ret == -1) {
             //disconnect client
             ret = epoll_ctl(epfd, EPOLL_CTL_DEL, cs->client_fd, nullptr);
             if(ret == -1) {
                 error_msg = strerror(errno);
-                logger->add_log(new Log("Server: Remove fd from epfd(" + std::string(error_msg) + ").", Log::WARNING));
+                //logger->add_log(new Log("Server: Remove fd from epfd(" + std::string(error_msg) + ").", Log::WARNING));
             }
             close(cs->client_fd);
-            delete cs;
+            //free_http_header_get_struct(header_struct);
             break;
         }
         std::unordered_map<std::string, std::string>::iterator it;  //map iterator
         std::string req_method = "UNKNOWN";
         std::string req_url = "UNKNOWN";
         std::string user_agent = "UNKNOWN";
-        //create response message
-        //transform to lower case
-        std::transform(req_url.begin(), req_url.end(), req_url.begin(), ::tolower);
         //picture
-        if((it = header_struct->header_map->find("suffix")) != header_struct->header_map->end() && pic_type_set.count(it->second) > 0) {
-            ret = http_response(PIC_DIR, header_struct->header_map, cs, logger, Server::PIC);
+        if((it = header_struct.header_map.find("suffix")) != header_struct.header_map.end() && pic_type_set.count(it->second) > 0) {
+            ret = http_response(PIC_DIR, header_struct.header_map, cs, logger, Server::PIC);
             if(ret == -1) {
                 ret = epoll_ctl(epfd, EPOLL_CTL_DEL, cs->client_fd, nullptr);
                 if(ret == -1) {
@@ -273,11 +315,18 @@ void Server::handle_request(void *arg) {
                     logger->add_log(new Log("Server: Remove fd from epfd(" + std::string(error_msg) + ").", Log::WARNING));
                 }
                 close(cs->client_fd);
+                //free_http_header_get_struct(header_struct);
                 break;
             }
         } else {
             //HTML
-            ret = http_response(HTML_DIR, header_struct->header_map, cs, logger, Server::HTML);
+            ret = http_response(HTML_DIR, header_struct.header_map, cs, logger, Server::HTML);
+            /*std::string out_buf = "HTTP/1.1 200 OK\r\n"
+                                  "Content-Type: text/html\r\n"
+                                  "Content-Length: 4\r\n"
+                                  "\r\n"
+                                  "<hr>";
+            ret = send(cs->client_fd, out_buf.c_str(), out_buf.length(), 0);*/
             if(ret == -1) {
                 ret = epoll_ctl(epfd, EPOLL_CTL_DEL, cs->client_fd, nullptr);
                 if(ret == -1) {
@@ -285,42 +334,165 @@ void Server::handle_request(void *arg) {
                     logger->add_log(new Log("Server: Remove fd from epfd(" + std::string(error_msg) + ").", Log::WARNING));
                 }
                 close(cs->client_fd);
+                //free_http_header_get_struct(header_struct);
                 break;
             }
+            break;
         }
-        if((it = header_struct->header_map->find("req_method")) != header_struct->header_map->end()) {
+        if((it = header_struct.header_map.find("req_method")) != header_struct.header_map.end()) {
             req_method = it->second;
         }
-        if((it = header_struct->header_map->find("req_url")) != header_struct->header_map->end()) {
+        if((it = header_struct.header_map.find("req_url")) != header_struct.header_map.end()) {
             req_url = it->second;
         }
-        if((it = header_struct->header_map->find("User-Agent")) != header_struct->header_map->end()) {
+        if((it = header_struct.header_map.find("User-Agent")) != header_struct.header_map.end()) {
             user_agent = it->second;
         }
         logger->add_log(new Log("Server: New Request " + req_method + " " + req_url + " from: " + std::string(inet_ntoa(cs->clientaddr.sin_addr)) + ". Browser: " + user_agent + ", Status: " + std::to_string(ret), Log::DEBUG));
-        if((it = header_struct->header_map->find("Connection")) == header_struct->header_map->end()) {
+        if((it = header_struct.header_map.find("Connection")) == header_struct.header_map.end()) {
             close(cs->client_fd);
         }
+        //free_http_header_get_struct(header_struct);
     } while(false);
-    delete ts;
     delete cs;
+    delete ts;
 }
-
 int Server::parse_http_header(struct http_header_get_struct *header_struct, Server::client_struct *cs, Logger *logger, int epfd) {
+    char in_buff[1];    //temp read buffer
+    std::string key = "";   //key
+    std::string value = "";  //value
+    bool is_reading_key = true;     //track pointer traverse the data, is the pointer belong to key(true) or value(false) currently
+    //save suffix
+    std::string suffix = "";
+    bool dot = false;
+    int ret = -1;
+
+    // req method
+    do {
+        memset(in_buff, 0, sizeof(in_buff));
+        ret = readn(in_buff, 1, cs->client_fd);
+        //std::cout << in_buff << std::endl;
+        if(ret == -1) {
+            return -1;
+        }
+        if(ret != 0 && strlen(in_buff) != 0 && strcmp(in_buff, " ") != 0) {
+            value += std::string(in_buff);
+        }
+    } while((ret > 0 || strlen(in_buff) > 0) && strcmp(in_buff, " ") != 0);
+    if(value.length() == 0) return -1;
+    header_struct->header_map["req_method"] = value;
+    value.clear();
+
+    //req_url
+    do {
+        memset(in_buff, 0, sizeof(in_buff));
+        ret = readn(in_buff, 1, cs->client_fd);
+        if(ret == -1) {
+            return -1;
+        }
+        if(dot && ret != 0 && strcmp(in_buff, " ") != 0) {
+            suffix += in_buff;
+        }
+        if(strcmp(in_buff, ".") == 0) {
+            dot = true;
+        }
+        if(ret != 0 && strlen(in_buff) != 0 && strcmp(in_buff, " ") != 0) {
+            value += in_buff;
+        }
+    } while((ret > 0 || strlen(in_buff) > 0) && strcmp(in_buff, " ") != 0);
+    if(value.length() == 0) return -1;
+
+    header_struct->header_map["req_url"] = value;
+    header_struct->header_map["suffix"] = suffix;
+    value.clear();
+
+    //http-version
+    do {
+        memset(in_buff, 0, sizeof(in_buff));
+        ret = readn(in_buff, 1, cs->client_fd);
+        if(ret == -1) {
+            return -1;
+        }
+        if(ret != 0 && strcmp(in_buff, " ") != 0 && strcmp(in_buff, "\r") != 0 && strcmp(in_buff, "\n") != 0) {
+            value += in_buff;
+        }
+    } while((ret > 0 || strlen(in_buff) > 0) && strcmp(in_buff, " ") != 0 && strcmp(in_buff, "\r") != 0 && strcmp(in_buff, "\n") != 0);
+    if(value.length() == 0) return -1;
+    header_struct->header_map["http_version"] = value;
+    value.clear();
+    //skip '\n'
+    if(strcmp(in_buff, "\r") == 0) {
+        ret = readn(in_buff, 1, cs->client_fd);
+        if(ret == -1) {
+            return -1;
+        }
+    }
+
+    //read the rest of data
+    while(true) {
+        memset(in_buff, 0, sizeof(in_buff));
+        ret = readn(in_buff, 1, cs->client_fd);
+        if(ret == -1) return -1;
+        if(ret <= 0 || strlen(in_buff) <= 0) {
+            break;
+        }
+        if(strcmp(in_buff, "\r") == 0 || strcmp(in_buff, "\n") == 0) {
+            //skip '\n'
+            if(strcmp(in_buff, "\r") == 0) {
+                ret = readn(in_buff, 1, cs->client_fd);
+                if(ret == -1) return -1;
+                if(ret <= 0) {
+                    break;
+                }
+            }
+            if(key.length() > 0 && value.length() > 0) {
+                header_struct->header_map[key] = value;
+            }
+            key.clear();
+            value.clear();
+            is_reading_key = true;
+            continue;
+        }
+        if(strcmp(in_buff, ":") == 0 && is_reading_key) {
+            is_reading_key = false;
+            //skip a space
+            ret = readn(in_buff, 1, cs->client_fd);
+            if(ret == -1) return -1;
+            if(ret <= 0) break;
+            continue;
+        }
+        if(is_reading_key == true) {
+            key += std::string(in_buff);
+        } else {
+            value += std::string(in_buff);
+        }
+    }
+    return 1;
+}
+/*int Server::parse_http_header(struct http_header_get_struct *header_struct, Server::client_struct *cs, Logger *logger, int epfd) {
     std::unordered_map<std::string, std::string> *header_map = header_struct->header_map;     //store header result
+    //std::unordered_map<std::string, std::string>::iterator it;  //map iterator
     //std::unordered_map<std::string, std::string> *arg_map = header_struct->arg_map; //store arguments result
-    char* in_buff;    //temp read buffer
+    char in_buff[1];    //temp read buffer
     std::string key = "";   //key
     std::string value = "";  //value
     bool is_reading_key = true;     //track pointer traverse the data, is the pointer belong to key(true) or value(false) currently
     int count = 0;
-    std::string first_line_key[] = {"req_method", "req_url", "http_version"};
+    const std::string first_line_key[] = {"req_method", "req_url", "http_version"};
     //save suffix
     std::string suffix = "";
     bool dot = false;
+    int ret = -1;
     //read first line
     while(true) {
-        in_buff = readn(1, cs, logger, epfd);
+        //in_buff = new char[2];
+        ret = readn(in_buff, 1, cs->client_fd);
+        if(ret == -1) {
+            return -1;
+        }
+        if(ret == -2 || ret == 0) {
+            break;
+        }
         if(in_buff == nullptr || strlen(in_buff) <= 0 || strcmp(in_buff, "\r") == 0 || strcmp(in_buff, "\n") == 0) {
             if(value.length() > 0) {
                 header_map->insert(std::pair<std::string, std::string>(first_line_key[count], value));
@@ -328,27 +500,33 @@ int Server::parse_http_header(struct http_header_get_struct *header_struct, Serv
             value = "";
             //skip '\n'
             if(in_buff != nullptr && strcmp(in_buff, "\r") == 0) {
-                delete in_buff;
-                in_buff = readn(1, cs, logger, epfd);
+                //delete[] in_buff;
+                //in_buff = new char[2];
+                ret = readn(in_buff, 1, cs->client_fd);
+                if(ret == -1) return -1;
+                if(ret == -2 || ret == 0) {
+                    break;
+                }
             }
-            delete in_buff;
+            //delete[] in_buff;
             break;
         }
         if(strcmp(in_buff, " ") == 0) {
             if(value.length() > 0) {
-                header_map->insert(std::pair<std::string, std::string>(first_line_key[count], value));
+                std::cout << count << "." << first_line_key[count] << "," << value << std::endl;
+                header_map->insert(std::pair<std::string, std::string>{first_line_key[count], value});
             }
             if(count == 1) {
                 if(suffix.length() == 0) {
-                    header_map->insert(std::pair<std::string, std::string>("suffix", "html"));
+                    header_map->insert(std::pair<std::string, std::string>{"suffix", "html"});
                 } else {
-                    header_map->insert(std::pair<std::string, std::string>("suffix", suffix));
+                    header_map->insert(std::pair<std::string, std::string>{"suffix", suffix});
                 }
                 dot = false;
             }
             count++;
             value = "";
-            delete in_buff;
+            //delete[] in_buff;
             continue;
         }
         if(dot) {
@@ -358,35 +536,58 @@ int Server::parse_http_header(struct http_header_get_struct *header_struct, Serv
             dot = true;
         }
         value += std::string(in_buff);
-        delete in_buff;
+       // delete[] in_buff;
     }
     //read rest of the data
     while(true) {
-        in_buff = readn(1, cs, logger, epfd);
-        if(in_buff == nullptr || strlen(in_buff) <= 0) {
-            delete in_buff;
+        //std::cout << "parse_http_header start" << std::endl;
+        //in_buff = new char[2];
+        ret = readn(in_buff, 1, cs->client_fd);
+        if(ret == -1) return -1;
+        if(ret == -2 || ret == 0) {
             break;
+        }
+        if(in_buff == nullptr || in_buff == NULL) {
+            //delete[] in_buff;
+            //std::cout << "parse_http_header end" << std::endl;
+            break;
+        }
+        if(strlen(in_buff) <= 0) {
+            //delete[] in_buff;
+            //std::cout << "parse_http_header end" << std::endl;
+            continue;
         }
         if(strcmp(in_buff, "\r") == 0 || strcmp(in_buff, "\n") == 0) {
             //skip '\n'
             if(strcmp(in_buff, "\r") == 0) {
-                delete in_buff;
-                in_buff = readn(1, cs, logger, epfd);
+                //delete[] in_buff;
+                //in_buff = new char[2];
+                ret = readn(in_buff, 1, cs->client_fd);
+                if(ret == -1) return -1;
+                if(ret == -2 || ret == 0) {
+                    break;
+                }
             }
             if(key.length() > 0 && value.length() > 0) {
-                header_map->insert(std::pair<std::string, std::string>(key, value));
+                header_map->insert(std::pair<std::string, std::string>{key, value});
             }
             key = "";
             value = "";
             is_reading_key = true;
-            delete in_buff;
+            //delete[] in_buff;
+            //std::cout << "parse_http_header end" << std::endl;
             continue;
         }
         if(strcmp(in_buff, ":") == 0 && is_reading_key) {
             is_reading_key = false;
-            delete in_buff;
+            //delete[] in_buff;
             //skip a space
-            delete readn(1, cs, logger, epfd);
+           // in_buff = new char[2];
+            ret = readn(in_buff, 1, cs->client_fd);
+            if(ret == -1) return -1;
+            if(ret == -2 || ret == 0) break;
+            //delete[] in_buff;
+            //std::cout << "parse_http_header end" << std::endl;
             continue;
         }
         if(is_reading_key == true) {
@@ -394,15 +595,15 @@ int Server::parse_http_header(struct http_header_get_struct *header_struct, Serv
         } else {
             value += std::string(in_buff);
         }
-        delete in_buff;
+        //std::cout << "parse_http_header end" << std::endl;
+        //delete[] in_buff;
     }
     return header_map->size() == 0 ? -1 : 1;
-}
+}*/
 
-int Server::http_response(std::string dir, std::unordered_map<std::string, std::string> *map, Server::client_struct *cs, Logger *logger,
+int Server::http_response(std::string dir, std::unordered_map<std::string, std::string> map, Server::client_struct *cs, Logger *logger,
                           Server::request_type type) {
     std::ifstream in;
-    std::unordered_map<std::string, std::string>::iterator it;  //map iterator
     std::string req_url = "UNKNOWN";
     std::string http_version = "HTTP/1.1";
     std::string status = "200 OK";
@@ -411,18 +612,17 @@ int Server::http_response(std::string dir, std::unordered_map<std::string, std::
     bool keep_alive = false;
     int result = 200;
     int ret = -1;
-    if((it = map->find("req_url")) != map->end()) {
-        req_url = it->second;
+    if(map["req_url"].length() > 0) {
+        req_url = map["req_url"];
     }
-    if((it = map->find("http_version")) != map->end()) {
-        http_version = it->second;
+    if(map["http_version"].length() > 0) {
+        http_version = map["http_version"];
     }
-    if((it = map->find("Connection")) != map->end() && it->second == "keep-alive") {
+    if(map["Connection"].length() > 0 && map["Connection"] == "keep-alive") {
         keep_alive = true;
     }
-    if((it = map->find("suffix")) != map->end()) {
-        suffix = it->second;
-    }
+    //std::cout << req_url << ":" << std::endl;
+    suffix = map["suffix"].length() > 0 ? map["suffix"] : "html";
     dir = req_url == "/" ? dir + "/index.html" : dir + req_url;
     std::string out_buff;
     //check if file exist
@@ -441,7 +641,6 @@ int Server::http_response(std::string dir, std::unordered_map<std::string, std::
         struct stat stat_buff;
         stat(dir.c_str(), &stat_buff);
         int length = stat_buff.st_size;
-        std::cout << length << std::endl;
         //create http header
         //http version and status
         out_buff = http_version + " " + status + "\r\n";
@@ -546,7 +745,6 @@ int Server::http_response(std::string dir, std::unordered_map<std::string, std::
     struct stat stat_buff;
     stat(dir.c_str(), &stat_buff);
     int length = stat_buff.st_size;
-    std::cout << length << std::endl;
     //send content length
     out_buff = "Content-Length: " + std::to_string(length) + "\r\n";
     ret = send(cs->client_fd, out_buff.c_str(), out_buff.length(), 0);
@@ -563,20 +761,19 @@ int Server::http_response(std::string dir, std::unordered_map<std::string, std::
     }
     //body
     std::string str;
-    int count = 0;
     while(!in.eof()) {
         std::getline(in, str);
         if(!in.eof()) {
             str += "\n";
         }
-        count += str.length();
         ret = send(cs->client_fd, str.c_str(), str.length(), 0);
         if(ret == -1) {
-            perror("send");
+            perror("send content");
             result = -1;
             break;
         }
     }
     in.close();
+    //std::cout << "http_response end" << std::endl;
     return result;
 }

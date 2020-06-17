@@ -43,6 +43,7 @@ ThreadPool::ThreadPool(int min_thread_num, int max_thread_num, int add_step) {
     //init mutex and condition
     lock = PTHREAD_MUTEX_INITIALIZER;
     empty_queue_cond = PTHREAD_COND_INITIALIZER;
+    thread_lock = PTHREAD_MUTEX_INITIALIZER;
     //create worker
     for(auto i = 0; i < min_thread_num; ++i) {
         Worker *worker = new Worker(this);
@@ -92,7 +93,10 @@ void* Worker::init_worker(void *arg) {
             break;
         }
         logger->add_log(new Log("Worker: " + std::to_string(pthread_self()) + " get one task.", Log::INFO));
+        pthread_mutex_lock(&pool->thread_lock);
         pool->busy_thread_num++;
+        //std::cout << "add: " <<pool->busy_thread_num << std::endl;
+        pthread_mutex_unlock(&pool->thread_lock);
         Task *task = Utility::remove_node(pool->tasks_head, pool->tasks_tail);
         if(task == nullptr) {
             pthread_mutex_unlock(&pool->lock);
@@ -101,7 +105,10 @@ void* Worker::init_worker(void *arg) {
         pool->tasks_num--;
         pthread_mutex_unlock(&pool->lock);
         task->func(task->arg);
+        pthread_mutex_lock(&pool->thread_lock);
         pool->busy_thread_num--;
+        //std::cout << "remove: " <<pool->busy_thread_num << std::endl;
+        pthread_mutex_unlock(&pool->thread_lock);
         logger->add_log(new Log("Worker: " + std::to_string(pthread_self()) + " finish one task.", Log::DEBUG));
     }
     logger->add_log(new Log("Worker: " + std::to_string(pthread_self()) + " has been removed", Log::INFO));
@@ -130,16 +137,18 @@ void * Manager::init_manager(void *arg) {
         float workers_num = pool->workers_num;
         logger->add_log(new Log("Manager: " + std::to_string(pthread_self()) + " number of busy threads: " + std::to_string((int)busy_thread_num) + " number of total threads: " + std::to_string((int)workers_num) + ".", Log::DEBUG));
         //add thread
-        if(busy_thread_num / workers_num > ADD_THREAD_RATE && workers_num + pool->add_step <= pool->max_thread_num) {
-            logger->add_log(new Log("Manager: " + std::to_string(pthread_self()) + " add new threads: " + std::to_string(pool->add_step), Log::DEBUG));
-            for(int i = 0; i < pool->add_step; ++i) {
+        if(busy_thread_num / workers_num > ADD_THREAD_RATE && workers_num <= pool->max_thread_num) {
+            int addition_count = std::min(pool->add_step, (pool->max_thread_num - (int)workers_num));
+            logger->add_log(new Log("Manager: " + std::to_string(pthread_self()) + " add new threads: " + std::to_string(addition_count), Log::DEBUG));
+            for(int i = 0; i < addition_count; ++i) {
                 Worker *worker = new Worker(pool);
                 Utility::add_node(worker, pool->workers_tail);
                 pool->workers_num++;
             }
-        } else if((float)pool->busy_thread_num / (float)pool->workers_num < DEL_THREAD_RATE && workers_num - pool->add_step >= pool->min_thread_num) {   //remove thread
-            logger->add_log(new Log("Manager: " + std::to_string(pthread_self()) + " remove threads: " + std::to_string(pool->add_step), Log::DEBUG));
-            pool->delete_thread_num += pool->add_step;
+        } else if((float)pool->busy_thread_num / (float)pool->workers_num < DEL_THREAD_RATE && workers_num > pool->min_thread_num) {   //remove thread
+            int remove_count = std::min(pool->add_step, ((int)workers_num - pool->min_thread_num));
+            logger->add_log(new Log("Manager: " + std::to_string(pthread_self()) + " remove threads: " + std::to_string(remove_count), Log::DEBUG));
+            pool->delete_thread_num += remove_count;
             pthread_cond_broadcast(&pool->empty_queue_cond);
         }
     }

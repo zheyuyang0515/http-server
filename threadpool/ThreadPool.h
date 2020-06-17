@@ -69,6 +69,7 @@ private:
 
 public:
     pthread_mutex_t lock;       //mutex
+    pthread_mutex_t thread_lock;        //manipulate number of thread
     pthread_cond_t empty_queue_cond;    //condition
     Task *tasks_head;     //task_head dummy queue
     Task *tasks_tail;        //task_tail dummy queue

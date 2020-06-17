@@ -57,7 +57,8 @@ public:
         int epfd;
     };
     //read n characters from the specific client socket
-    static char* readn(int n, struct client_struct *cs, Logger *logger, int epfd);
+    //static int readn(char *buff, int n, struct client_struct *cs, Logger *logger, int epfd);
+    static int readn(char *buff, int n, int client_fd);
     /**
      * handle request
      * @param ts: struct task_struct
@@ -65,9 +66,12 @@ public:
     static void handle_request(void *ts);
 private:
     struct http_header_get_struct {
-        std::unordered_map<std::string, std::string> *header_map;    //header information(k-v)
-        std::unordered_map<std::string, std::string> *arg_map;       //argument in the url(k-v): this map is not being used currently
+        std::unordered_map<std::string, std::string> header_map;    //header information(k-v)
+        std::unordered_map<std::string, std::string> arg_map;       //argument in the url(k-v): this map is not being used currently
     };
+    static void free_http_header_get_struct(struct http_header_get_struct *h) {
+        delete h;
+    }
      /**
       * @def parse http header information, and store the information in two hashmaps
       * @param header_struct: store the header result
@@ -86,7 +90,7 @@ private:
      * @param type: response type
      * @return
      */
-    static int http_response(std::string dir, std::unordered_map<std::string, std::string> *map, struct client_struct *cs, Logger *logger, request_type type);
+    static int http_response(std::string dir, std::unordered_map<std::string, std::string> map, struct client_struct *cs, Logger *logger, request_type type);
     static char* get_cur_time() {
         std::string weekdays[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
         std::string monthes[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"};
