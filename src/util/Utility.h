@@ -10,8 +10,8 @@
 #include "../logger/Log.h"
 #include <iostream>
 #include <sys/sysinfo.h>
-#define LOG_DIR "../logs/log"
-#define CONF_DIR "../conf/server.xml"
+#define LOG_DIR "logs/log"
+#define CONF_DIR "conf/server.xml"
 
 #define DEFAULT_MAX_CONNECTION 128
 #define DEFAULT_MIN_WORKER 1

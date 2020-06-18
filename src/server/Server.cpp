@@ -4,8 +4,8 @@
 
 #include "Server.h"
 
-#define PIC_DIR "../res/pic"
-#define HTML_DIR "../res/html"
+#define PIC_DIR "res/pic"
+#define HTML_DIR "res/html"
 //init pic_type
 const std::unordered_set<std::string> Server::pic_type_set {"jpg", "jpeg", "gif", "ico", "png", "bmp"};
 const std::unordered_set<std::string> Server::text_type_set {"html", "css"};
