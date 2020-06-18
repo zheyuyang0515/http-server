@@ -4,7 +4,10 @@
 
 #include "ThreadPool.h"
 
-ThreadPool::ThreadPool(int min_thread_num, int max_thread_num, int add_step) {
+ThreadPool::ThreadPool(int min_thread_num, int max_thread_num, int add_step, int adjust_time, float add_worker_rate, float delete_worker_rate) {
+    this->adjust_time = adjust_time;
+    this->add_worker_rate = add_worker_rate;
+    this->delete_worker_rate = delete_worker_rate;
     this->min_thread_num = min_thread_num;
     this->max_thread_num = max_thread_num;
     this->add_step = add_step;
@@ -128,8 +131,9 @@ void * Manager::init_manager(void *arg) {
     ThreadPool *pool = (ThreadPool *)arg;
     Logger *logger = Logger::get_instance(LOG_DIR, Log::ALL);
     logger->add_log(new Log("Manager: " + std::to_string(pthread_self()) + " has been created", Log::INFO));
+    const int time_interval = pool->adjust_time;
     while(true) {
-        sleep(DEFAULT_SLEEP_TIME);
+        sleep(time_interval);
         if(pool->terminate) {
             break;
         }
@@ -137,7 +141,7 @@ void * Manager::init_manager(void *arg) {
         float workers_num = pool->workers_num;
         logger->add_log(new Log("Manager: " + std::to_string(pthread_self()) + " number of busy threads: " + std::to_string((int)busy_thread_num) + " number of total threads: " + std::to_string((int)workers_num) + ".", Log::DEBUG));
         //add thread
-        if(busy_thread_num / workers_num > ADD_THREAD_RATE && workers_num <= pool->max_thread_num) {
+        if(busy_thread_num / workers_num > pool->add_worker_rate && workers_num <= pool->max_thread_num) {
             int addition_count = std::min(pool->add_step, (pool->max_thread_num - (int)workers_num));
             logger->add_log(new Log("Manager: " + std::to_string(pthread_self()) + " add new threads: " + std::to_string(addition_count), Log::DEBUG));
             for(int i = 0; i < addition_count; ++i) {
@@ -145,7 +149,7 @@ void * Manager::init_manager(void *arg) {
                 Utility::add_node(worker, pool->workers_tail);
                 pool->workers_num++;
             }
-        } else if((float)pool->busy_thread_num / (float)pool->workers_num < DEL_THREAD_RATE && workers_num > pool->min_thread_num) {   //remove thread
+        } else if((float)pool->busy_thread_num / (float)pool->workers_num < pool->delete_worker_rate && workers_num > pool->min_thread_num) {   //remove thread
             int remove_count = std::min(pool->add_step, ((int)workers_num - pool->min_thread_num));
             logger->add_log(new Log("Manager: " + std::to_string(pthread_self()) + " remove threads: " + std::to_string(remove_count), Log::DEBUG));
             pool->delete_thread_num += remove_count;

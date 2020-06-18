@@ -10,9 +10,6 @@
 #include <unistd.h>
 #include "../logger/Logger.h"
 #include "../util/Utility.h"
-#define DEFAULT_SLEEP_TIME 10       //adjust the number of worker every this seconds
-#define ADD_THREAD_RATE 0.8         //add new threads into the pool when (the number of busy threads in the pool) / (the number of threads in the pool) >= this rate
-#define DEL_THREAD_RATE 0.3         //remove threads from the pool when(the number of busy threads in the pool) / (the number of threads in the pool) <= this rate
 class ThreadPool;
 /**
  * Class Worker: the class of thread in the thread pool
@@ -66,7 +63,6 @@ class ThreadPool {
 private:
     Manager *manager;       //manager thread
     Logger *logger;
-
 public:
     pthread_mutex_t lock;       //mutex
     pthread_mutex_t thread_lock;        //manipulate number of thread
@@ -79,8 +75,10 @@ public:
     int min_thread_num, max_thread_num, add_step;
     int delete_thread_num;      //number of threads need to be deleted at present
     int busy_thread_num;        //number of busy thread
+    int adjust_time;            //indicate the time interval when the manager part will reassign the number of thread in the thread pool
     bool terminate;             //indicate if the threadpool needs to be terminated
-
+    float add_worker_rate;      //indicate the rate in decimal, the manager will add workers into the thread pool if the number of busy workers reaches this rate.
+    float delete_worker_rate;   //indicate the rate in decimal, the manager will delete workers into the thread pool if the number of busy workers reaches this rate.
 public:
 
     /**
@@ -94,8 +92,11 @@ public:
      * @param min_thread_num: the minimal number of threads in the pool
      * @param max_thread_num: the maximal number of threads int the pool
      * @param add_step: the number of threads will be modified(add/delete) in each adjustment period
+     * @param adjust_time: indicate the time interval when the manager part will reassign the number of thread in the thread pool
+     * @param add_worker_rate: indicate the rate in decimal, the manager will add workers into the thread pool if the number of busy workers reaches this rate.
+     * @param delete_worker_rate: indicate the rate in decimal, the manager will delete workers into the thread pool if the number of busy workers reaches this rate.
      */
-    ThreadPool(int min_thread_num, int max_thread_num, int add_step);
+    ThreadPool(int min_thread_num, int max_thread_num, int add_step, int adjust_time, float add_worker_rate, float delete_worker_rate);
     ~ThreadPool();
 };
 

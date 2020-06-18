@@ -22,6 +22,10 @@ void* Logger::init_logger(void *arg){
     std::ofstream out;
     //open log file
     out.open(logger->dir, std::ios::out | std::ios::app);
+    if(!out) {
+        perror("Open log file failed, please make sure have 'logs' directory in the workspace");
+        exit(-1);
+    }
     //used to convert enum to string
     std::string levels[] = {"", "DEBUG", "INFO", "WARNING", "ERROR", "FATAL"};
     while(true) {

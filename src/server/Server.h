@@ -33,13 +33,17 @@ private:
     static const std::unordered_set<std::string> pic_type_set;    //save all pic suffix(bmp, jpeg, png, gif, jpg, ico)
     static const std::unordered_set<std::string> text_type_set;    //save all pic suffix(html, css)
 public:
+    struct page_struct {
+        std::string main_page;
+        std::string error_404_page;
+    };
     /**
      * Constructor
      * @param ip: ip address which the server needs to listen to
      * @param port: port number which the server needs to listen to
      * @param max_request: maximal number of requests the server could handle in one epoll_wait loop
      */
-    Server(std::string ip, int port, int max_request, ThreadPool *pool);
+    Server(std::string ip, int port, int max_request, ThreadPool *pool, struct Server::page_struct ps, int max_connection);
     ~Server() {};
 public:
     /**
