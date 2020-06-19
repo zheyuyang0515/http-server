@@ -14,7 +14,7 @@ Note:
 3. conf/server.xml file is required to initiate the server, and format of this xml file should be strictly correct.
 ## 3. Structure of the program
 ![Structure Diagram](https://raw.githubusercontent.com/zheyuyang0515/Pic/master/structure.jpg)
-## 4. Pressure Test
+## 4. Test
 ### i. Environment
 1. Operating System: Ubuntu 18.04.4 LTS (Kernel: 4.15.0-106-generic)
 2. CPU Logic Core: 4
