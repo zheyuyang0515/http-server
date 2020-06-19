@@ -4,11 +4,11 @@
 
 #include "Server.h"
 
-#define PIC_DIR "res/pic"
+#define PIC_DIR "res"
 #define HTML_DIR "res/html"
 //init pic_type
-const std::unordered_set<std::string> Server::pic_type_set {"jpg", "jpeg", "gif", "ico", "png", "bmp"};
-const std::unordered_set<std::string> Server::text_type_set {"html", "css"};
+const std::unordered_map<std::string, std::string> Server::pic_type_map {{"jpg", "image/jpg"}, {"jpeg", "image/jpeg"}, {"gif", "image/gif"}, {"ico", "image/ico"}, {"png", "image/png"}, {"bmp", "image/bmp"}};
+const std::unordered_map<std::string, std::string> Server::text_type_map {{"html", "text/html"}, {"css", "text/css"}, {"js", "application/javascript"}};
 Server::Server(std::string ip, int port, int max_request, ThreadPool *pool, struct page_struct ps, int max_connection) {
     this->max_request = max_request;
     this->pool = pool;
@@ -246,7 +246,7 @@ void Server::handle_request(void *arg) {
         std::string user_agent = "UNKNOWN";
         std::string suffix = header_struct.header_map["suffix"];
         //picture
-        if(pic_type_set.count(suffix) > 0) {
+        if(pic_type_map.count(suffix) > 0) {
             ret = http_response(PIC_DIR, header_struct.header_map, cs, logger, Server::PIC);
             if(ret == -1) {
                 ret = epoll_ctl(epfd, EPOLL_CTL_DEL, cs->client_fd, nullptr);
@@ -258,7 +258,7 @@ void Server::handle_request(void *arg) {
                 //free_http_header_get_struct(header_struct);
                 break;
             }
-        } else if(suffix.length() == 0 || text_type_set.count(suffix) > 0) {
+        } else {
             //text
             ret = http_response(HTML_DIR, header_struct.header_map, cs, logger, Server::HTML);
             if(ret == -1) {
@@ -327,7 +327,11 @@ int Server::parse_http_header(struct http_header_get_struct *header_struct, Serv
             suffix += in_buff;
         }
         if(strcmp(in_buff, ".") == 0) {
-            dot = true;
+            if(dot) {
+                suffix.clear();
+            } else {
+                dot = true;
+            }
         }
         if(ret != 0 && strlen(in_buff) != 0 && strcmp(in_buff, " ") != 0) {
             value += in_buff;
@@ -427,8 +431,17 @@ int Server::http_response(std::string dir, std::unordered_map<std::string, std::
     suffix = map["suffix"].length() > 0 ? map["suffix"] : "html";
     dir = req_url == "/" ? dir + "/index.html" : dir + req_url;
     std::string out_buff;
+    std::unordered_map<std::string, std::string>::iterator it;
     //check if file exist
     while(type == Server::PIC) {
+        if(Server::pic_type_map.count(suffix) == 0) {
+            dir = std::string(HTML_DIR) + "/500.html";
+            type = Server::HTML;
+            status = "500 Internal Server Error";
+            suffix = "html";
+            result = 500;
+            break;
+        }
         //response pic
         in.open(dir, std::ios::binary);
         //resource not exist
@@ -436,6 +449,7 @@ int Server::http_response(std::string dir, std::unordered_map<std::string, std::
             dir = std::string(HTML_DIR) + "/404.html";
             type = Server::HTML;
             status = "404 Not Found";
+            suffix = "html";
             result = 404;
             break;
         }
@@ -468,7 +482,8 @@ int Server::http_response(std::string dir, std::unordered_map<std::string, std::
             }
         }
         //content type
-        out_buff = "Content-Type: image/" + suffix + "\r\n";
+        std::string content_type = Server::pic_type_map.find(suffix)->second;
+        out_buff = "Content-Type: " + content_type + "\r\n";
         ret = send(cs->client_fd, out_buff.c_str(), out_buff.length(), 0);
         if(ret == -1) {
             //error
@@ -503,6 +518,12 @@ int Server::http_response(std::string dir, std::unordered_map<std::string, std::
         }
         return result;
     }
+    if(Server::text_type_map.count(suffix) == 0) {
+        dir = std::string(HTML_DIR) + "/500.html";
+        status = "500 Internal Server Error";
+        suffix = "html";
+        result = 500;
+    }
     //response html
     in.open(dir);
     if(!in) {
@@ -536,7 +557,8 @@ int Server::http_response(std::string dir, std::unordered_map<std::string, std::
         }
     }
     //content type
-    out_buff = "Content-Type: text/" + suffix + ", charset=UTF-8\r\n";
+    std::string content_type = Server::text_type_map.find(suffix)->second;
+    out_buff = "Content-Type: " + content_type + "\r\n";
     ret = send(cs->client_fd, out_buff.c_str(), out_buff.length(), 0);
     if(ret == -1) {
         //error

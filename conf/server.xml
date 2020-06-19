@@ -4,13 +4,13 @@
         <listen-ip>192.168.1.111</listen-ip>
         <listen-port>8686</listen-port>
         <max-connection>128</max-connection>
-        <max-request>1024</max-request>
+        <max-request>2048</max-request>
     </general>
     <worker>
-        <min-worker>1</min-worker>
+        <min-worker>4</min-worker>
         <max-worker>4</max-worker>
-        <add-step>1</add-step>
-        <adjust-time>30</adjust-time>
+        <add-step>80</add-step>
+        <adjust-time>10</adjust-time>
         <add-worker-rate>0.8</add-worker-rate>
         <delete-worker-rate>0.3</delete-worker-rate>
     </worker>
