@@ -1,7 +1,7 @@
 CC = g++
 
 main: Logger.o main.o Server.o ThreadPool.o Task.o tinyxml2.o Utility.o
-	$(CC) -o main Logger.o main.o Server.o ThreadPool.o Task.o tinyxml2.o Utility.o -lpthread
+	$(CC) -o main Logger.o Server.o main.o ThreadPool.o Task.o tinyxml2.o Utility.o -lpthread
 
 Logger.o: src/logger/Logger.cpp
 	$(CC) -g -c src/logger/Logger.cpp

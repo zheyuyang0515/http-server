@@ -8,6 +8,7 @@ int Utility::parse_conf_file(struct init_struct *is) {
     tinyxml2::XMLElement *root = nullptr;
     tinyxml2::XMLElement *element = nullptr;
     tinyxml2::XMLElement *children = nullptr;
+    tinyxml2::XMLElement *sub_children = nullptr;
     int ret = -1;
     ret = doc.LoadFile(CONF_DIR);
     if(ret != 0) {
@@ -160,4 +161,32 @@ int Utility::parse_conf_file(struct init_struct *is) {
         }
         is->severity_ignore = Log::Level(std::stoi(children->GetText()));
     }
+    //proxy
+    element = root->FirstChildElement("proxy");
+    is->host_num = 0;
+    if(element != nullptr) {
+        //host
+        children = element->FirstChildElement("host");
+        while(children != nullptr) {
+            sub_children = children->FirstChildElement("ip");
+            if(sub_children == nullptr) {
+                std::cerr << "Config file format error: node 'host': 'ip' node in node 'host' is required." << std::endl;
+                return -1;
+            }
+            is->host_ips.push_back(sub_children->GetText());
+            sub_children = children->FirstChildElement("port");
+            if(sub_children == nullptr) {
+                std::cerr << "Config file format error: node 'host': 'port' node in node 'host' is required." << std::endl;
+                return -1;
+            }
+            is->host_ports.push_back(std::stoi(sub_children->GetText()));
+            is->host_num++;
+            children = children->NextSiblingElement();
+        }
+        if(is->host_num > 0) {
+            is->reverse_proxy_mode = true;
+        }
+    }
+    return 1;
+
 }

@@ -158,6 +158,7 @@ void Server::Listen() {
                 struct client_struct *cs = new client_struct();
                 cs->client_fd = client_fd;
                 cs->clientaddr = clientaddr;
+                cs->mode = 1;
                 event.data.ptr = cs;
                 ret = epoll_ctl(epfd, EPOLL_CTL_ADD, client_fd, &event);
                 if(ret == -1) {
@@ -182,18 +183,33 @@ void Server::Listen() {
                     delete cs;
                     continue;
                 }
-                //create task struct
-                struct task_struct *ts = new task_struct();
-                ts->epfd = epfd;
-                ts->logger = logger;
-                ts->cs = new client_struct();
-                ts->cs->client_fd = ((struct client_struct *)events[i].data.ptr)->client_fd;
-                ts->cs->clientaddr = ((struct client_struct *)events[i].data.ptr)->clientaddr;
-                //create task object
-                logger->add_log(new Log("Server: Recv Request from a client. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ".", Log::DEBUG));
-                Task *task = new Task(Server::handle_request, ts);
-                //add task to the queue
-                pool->add_task(task);
+                if(((struct client_struct *)events[i].data.ptr)->mode == 1) {   //static resources
+                    //create task struct
+                    struct task_struct *ts = new task_struct();
+                    ts->epfd = epfd;
+                    ts->logger = logger;
+                    ts->cs = new client_struct();
+                    ts->cs->client_fd = ((struct client_struct *)events[i].data.ptr)->client_fd;
+                    ts->cs->clientaddr = ((struct client_struct *)events[i].data.ptr)->clientaddr;
+
+                    //create task object
+                    logger->add_log(new Log("Server: Recv Request from a client. IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ".", Log::DEBUG));
+                    Task *task = new Task(Server::handle_request, ts);
+                    //add task to the queue
+                    pool->add_task(task);
+                } else {            //reverse proxy
+                    struct dispatch_response_task_struct *drts = new dispatch_response_task_struct;
+                    drts->logger = logger;
+                    drts->cs = new client_struct();
+                    drts->cs->client_fd = ((struct client_struct *)events[i].data.ptr)->client_fd;
+                    drts->cs->clientaddr = ((struct client_struct *)events[i].data.ptr)->clientaddr;
+                    //create task object
+                    logger->add_log(new Log("Server: Recv Response from a host/original server. Client IP: " + std::string(inet_ntoa(clientaddr.sin_addr)) + ", PORT: " + std::to_string(ntohs(clientaddr.sin_port)) + ".", Log::DEBUG));
+                    Task *task = new Task(Server::dispatch_response, drts);
+                    //add task to the queue
+                    pool->add_task(task);
+                }
+
             }
         }
 
@@ -226,71 +242,263 @@ void Server::handle_request(void *arg) {
     Logger *logger = ts->logger;
     int epfd = ts->epfd;
     char* error_msg;
-    do{
-        //parse http request header
-        struct http_header_get_struct header_struct;
-        ret = Server::parse_http_header(&header_struct, cs, logger, epfd);
+    int result = 0;    //final result of this function, >=0 on success, -1: error when interacting with client, -2: error when interacting with host server
+    int send_fd;
+
+    //parse http request header
+    struct http_header_get_struct header_struct;
+    ret = Server::parse_http_header(&header_struct, cs, logger, epfd);
+    if(ret == -1) {
+        //disconnect client
+        ret = epoll_ctl(epfd, EPOLL_CTL_DEL, cs->client_fd, nullptr);
         if(ret == -1) {
-            //disconnect client
-            ret = epoll_ctl(epfd, EPOLL_CTL_DEL, cs->client_fd, nullptr);
-            if(ret == -1) {
-                error_msg = strerror(errno);
-                logger->add_log(new Log("Server: Remove fd from epfd(" + std::string(error_msg) + ").", Log::WARNING));
-            }
-            close(cs->client_fd);
-            break;
+            error_msg = strerror(errno);
+            logger->add_log(new Log("Server: Remove fd from epfd(" + std::string(error_msg) + ").", Log::WARNING));
         }
-        std::unordered_map<std::string, std::string>::iterator it;  //map iterator
-        std::string req_method = "UNKNOWN";
-        std::string req_url = "UNKNOWN";
-        std::string user_agent = "UNKNOWN";
-        std::string suffix = header_struct.header_map["suffix"];
-        //picture
-        if(pic_type_map.count(suffix) > 0) {
-            ret = http_response(PIC_DIR, header_struct.header_map, cs, logger, Server::PIC);
-            if(ret == -1) {
-                ret = epoll_ctl(epfd, EPOLL_CTL_DEL, cs->client_fd, nullptr);
+        close(cs->client_fd);
+        delete cs;
+        delete ts;
+        return;
+    }
+    if(!reverse_proxy_mode) {       //reverse proxy service is off
+        do{
+            std::unordered_map<std::string, std::string>::iterator it;  //map iterator
+            std::string req_method = "UNKNOWN";
+            std::string req_url = "UNKNOWN";
+            std::string user_agent = "UNKNOWN";
+            std::string suffix = header_struct.header_map["suffix"];
+            //picture
+            if(pic_type_map.count(suffix) > 0) {
+                ret = http_response(PIC_DIR, header_struct.header_map, cs, logger, Server::PIC);
                 if(ret == -1) {
-                    error_msg = strerror(errno);
-                    logger->add_log(new Log("Server: Remove fd from epfd(" + std::string(error_msg) + ").", Log::WARNING));
+                    ret = epoll_ctl(epfd, EPOLL_CTL_DEL, cs->client_fd, nullptr);
+                    if(ret == -1) {
+                        error_msg = strerror(errno);
+                        logger->add_log(new Log("Server: Remove fd from epfd(" + std::string(error_msg) + ").", Log::WARNING));
+                    }
+                    close(cs->client_fd);
+                    pthread_mutex_lock(&keep_alive_map_mutex);
+                    keep_alive_map.erase(cs->client_fd);
+                    pthread_mutex_unlock(&keep_alive_map_mutex);
+                    delete cs;
+                    delete ts;
+                    return;
                 }
+            } else {
+                //text
+                ret = http_response(HTML_DIR, header_struct.header_map, cs, logger, Server::HTML);
+                if(ret == -1) {
+                    ret = epoll_ctl(epfd, EPOLL_CTL_DEL, cs->client_fd, nullptr);
+                    if(ret == -1) {
+                        error_msg = strerror(errno);
+                        logger->add_log(new Log("Server: Remove fd from epfd(" + std::string(error_msg) + ").", Log::WARNING));
+                    }
+                    close(cs->client_fd);
+                    pthread_mutex_lock(&keep_alive_map_mutex);
+                    keep_alive_map.erase(cs->client_fd);
+                    pthread_mutex_unlock(&keep_alive_map_mutex);
+                    delete cs;
+                    delete ts;
+                    return;
+                }
+            }
+            if((it = header_struct.header_map.find("req_method")) != header_struct.header_map.end()) {
+                req_method = it->second;
+            }
+            if((it = header_struct.header_map.find("req_url")) != header_struct.header_map.end()) {
+                req_url = it->second;
+            }
+            if((it = header_struct.header_map.find("User-Agent")) != header_struct.header_map.end()) {
+                user_agent = it->second;
+            }
+            logger->add_log(new Log("Server: New Request " + req_method + " " + req_url + " from: " + std::string(inet_ntoa(cs->clientaddr.sin_addr)) + ". Browser: " + user_agent + ", Status: " + std::to_string(ret), Log::DEBUG));
+            if((it = header_struct.header_map.find("Connection")) == header_struct.header_map.end()) {
                 close(cs->client_fd);
-                //free_http_header_get_struct(header_struct);
+            }
+        } while(false);
+    } else {    //TODO: reverse proxy service is on
+        do{
+            //if keep-alive then use last fd
+            if(keep_alive_map.count(cs->client_fd) > 0) {
+                send_fd = reverse_proxy_client_map[cs->client_fd];
+            } else {    //create new fd to connect to the server;
+                send_fd = socket(AF_INET, SOCK_STREAM, 0);
+                //random choose a host/original server
+                srand((unsigned)time(NULL));
+                int host_index = rand() % proxy_server_num;
+                //connect to that server
+                struct sockaddr_in server_addr;
+                server_addr.sin_family = AF_INET;
+                server_addr.sin_addr.s_addr = inet_addr(ips[host_index].c_str());
+                server_addr.sin_port = htons(ports[host_index]);
+                ret = connect(send_fd,
+                              (struct sockaddr *)&server_addr,
+                              sizeof(struct sockaddr));
+                if(ret < 0) {
+                    error_msg = strerror(errno);
+                    logger->add_log(new Log(("Server: Connect to origin failed: " + std::string(error_msg)), Log::ERROR));
+                    result = -1;
+                    break;
+                }
+
+                //save reverse_proxy_client_map
+                pthread_mutex_lock(&Server::reverse_proxy_client_map_mutex);
+                reverse_proxy_client_map[cs->client_fd] = send_fd;
+                pthread_mutex_unlock(&Server::reverse_proxy_client_map_mutex);
+
+                //save reverse_proxy_server_map
+                pthread_mutex_lock(&Server::reverse_proxy_server_map_mutex);
+                reverse_proxy_server_map[send_fd] = cs->client_fd;
+                pthread_mutex_unlock(&Server::reverse_proxy_server_map_mutex);
+
+                //add fd into epoll
+                struct epoll_event event;
+                event.events = EPOLLIN | EPOLLERR | EPOLLET;
+                struct client_struct *cs = new client_struct;
+                cs->client_fd = send_fd;
+                cs->mode = 2;
+                event.data.ptr = cs;
+                ret = epoll_ctl(ts->epfd, EPOLL_CTL_ADD, send_fd, &event);
+                if(ret < 0) {
+                    error_msg = strerror(errno);
+                    logger->add_log(new Log("Server: Add client to epoll failed(dispatch request): " + std::string(error_msg), Log::ERROR));
+                    result = -1;
+                    break;
+                }
+
+            }
+
+            //send http msg which is recved from the client to the host server
+            ret = Server::dispatch_request(header_struct.header_map, send_fd, cs, logger);
+            if(ret < 0) {
+                ret = epoll_ctl(ts->epfd, EPOLL_CTL_DEL, send_fd, nullptr);
+                if(ret < 0) {
+                    error_msg = strerror(errno);
+                    logger->add_log(new Log("Server: Delete client from epoll failed(dispatch request): " + std::string(error_msg), Log::WARNING));
+                }
+                result = -2;
                 break;
             }
-        } else {
-            //text
-            ret = http_response(HTML_DIR, header_struct.header_map, cs, logger, Server::HTML);
-            if(ret == -1) {
-                ret = epoll_ctl(epfd, EPOLL_CTL_DEL, cs->client_fd, nullptr);
-                if(ret == -1) {
-                    error_msg = strerror(errno);
-                    logger->add_log(new Log("Server: Remove fd from epfd(" + std::string(error_msg) + ").", Log::WARNING));
-                }
-                close(cs->client_fd);
-                //free_http_header_get_struct(header_struct);
-                break;
-            }
-            break;
+        } while(false);
+    }
+    if(result == -1) {  //error when interacting with client
+        close(cs->client_fd);
+    } else if(result == -2) {   //error when interacting with host server
+        close(send_fd);
+        close(cs->client_fd);
+        pthread_mutex_lock(&reverse_proxy_client_map_mutex);
+        reverse_proxy_client_map.erase(cs->client_fd);
+        pthread_mutex_unlock(&reverse_proxy_client_map_mutex);
+        pthread_mutex_lock(&reverse_proxy_server_map_mutex);
+        reverse_proxy_server_map.erase(send_fd);
+        pthread_mutex_unlock(&reverse_proxy_server_map_mutex);
+        if(keep_alive_map.count(cs->client_fd) > 0) {
+            pthread_mutex_lock(&keep_alive_map_mutex);
+            keep_alive_map.erase(cs->client_fd);
+            pthread_mutex_unlock(&keep_alive_map_mutex);
         }
-        if((it = header_struct.header_map.find("req_method")) != header_struct.header_map.end()) {
-            req_method = it->second;
+    } else {    //success
+        //add client to keep_alive_map if it is keep-alive
+        if(header_struct.header_map["Connection"] == "keep-alive") {
+            time_t timet;
+            time(&timet);
+            pthread_mutex_lock(&keep_alive_map_mutex);
+            keep_alive_map[cs->client_fd] = timet;
+            pthread_mutex_unlock(&keep_alive_map_mutex);
         }
-        if((it = header_struct.header_map.find("req_url")) != header_struct.header_map.end()) {
-            req_url = it->second;
-        }
-        if((it = header_struct.header_map.find("User-Agent")) != header_struct.header_map.end()) {
-            user_agent = it->second;
-        }
-        logger->add_log(new Log("Server: New Request " + req_method + " " + req_url + " from: " + std::string(inet_ntoa(cs->clientaddr.sin_addr)) + ". Browser: " + user_agent + ", Status: " + std::to_string(ret), Log::DEBUG));
-        if((it = header_struct.header_map.find("Connection")) == header_struct.header_map.end()) {
-            close(cs->client_fd);
-        }
-        //free_http_header_get_struct(header_struct);
-    } while(false);
+    }
     delete cs;
     delete ts;
 }
+int Server::dispatch_request(std::unordered_map<std::string, std::string> header_map, int send_fd, struct client_struct *cs, Logger *logger) {
+    std::string out_buff;
+    int ret = -1;
+    char *errormsg;
+    char in_buff[1];
+    //header
+    //first line
+    out_buff = header_map["req_method"] + " " + header_map["req_url"] + " " + header_map["http_version"] + "\n";
+    //all rest of headers
+    for(auto entry : header_map) {
+        if(entry.first == "req_method" || entry.first == "req_url" || entry.first == "http_version" || entry.first == "suffix") {
+            continue;
+        }
+        //test
+        if(entry.first == "Host") {
+            out_buff += "Host: 172.217.1.100:80\n";
+            continue;
+        }
+        //test
+        out_buff += entry.first + ": " + entry.second + "\n";
+    }
+    out_buff += "\n";
+    ret = send(send_fd, out_buff.c_str(), out_buff.length(), 0);
+    if(ret == -1) {
+        errormsg = strerror(errno);
+        logger->add_log(new Log("Server: Dispatch request failed(send request header): " + std::string(errormsg), Log::ERROR));
+        return -1;
+    }
+    //body(if has)
+    while(true) {
+        memset(in_buff, 0, sizeof(in_buff));
+        ret = readn(in_buff, 1, cs->client_fd);
+        if(ret == -1) {
+            errormsg = strerror(errno);
+            logger->add_log(new Log("Server: Dispatch request failed(fetch request body from client): " + std::string(errormsg), Log::ERROR));
+            return -1;
+        }
+        //read to tail or EAGAIN
+        if(ret <= 0) {
+            break;
+        }
+        ret = send(send_fd, in_buff, 1, 0);
+        if(ret < 0) {
+            errormsg = strerror(errno);
+            logger->add_log(new Log("Server: Dispatch request failed(send request body): " + std::string(errormsg), Log::ERROR));
+            return -1;
+        }
+    }
+    return 1;
+}
+//TODO: 这个函数怕不是有问题
+void Server::dispatch_response(void *arg) {
+    struct dispatch_response_task_struct *drts = (struct dispatch_response_task_struct *)arg;
+    struct client_struct *cs = drts->cs;
+    Logger *logger = drts->logger;
+    char *error_msg;
+    int ret = -1;
+    char in_buff[1];
+    memset(in_buff, 0, sizeof(in_buff));
+    if(reverse_proxy_server_map.count(cs->client_fd) == 0) {
+        logger->add_log(new Log("Server: Receive message from host/original server failed: client not found", Log::ERROR));
+    }
+    int client_fd = reverse_proxy_server_map[cs->client_fd];
+    while(ret = readn(in_buff, 1, cs->client_fd) > 0) {
+        ret = send(client_fd, in_buff, 1, 0);
+        if(ret == -1) {
+            break;
+        }
+        memset(in_buff, 0, sizeof(in_buff));
+    }
+    //error, close
+    if(ret == -1) {
+        error_msg = strerror(errno);
+        close(cs->client_fd);
+        close(client_fd);
+        pthread_mutex_lock(&reverse_proxy_server_map_mutex);
+        reverse_proxy_server_map.erase(cs->client_fd);
+        pthread_mutex_unlock(&reverse_proxy_server_map_mutex);
+        pthread_mutex_lock(&reverse_proxy_client_map_mutex);
+        reverse_proxy_client_map.erase(client_fd);
+        pthread_mutex_unlock(&reverse_proxy_client_map_mutex);
+        logger->add_log(new Log("Server: Receive message from host/original server failed: " + std::string(error_msg), Log::ERROR));
+        return;
+    }
+}
+
+
+
+
 int Server::parse_http_header(struct http_header_get_struct *header_struct, Server::client_struct *cs, Logger *logger, int epfd) {
     char in_buff[1];    //temp read buffer
     std::string key = "";   //key
@@ -381,6 +589,10 @@ int Server::parse_http_header(struct http_header_get_struct *header_struct, Serv
                 if(ret <= 0) {
                     break;
                 }
+            }
+            //next is the request body
+            if(key.length() == 0 && value.length() == 0) {
+                break;
             }
             if(key.length() > 0 && value.length() > 0) {
                 header_struct->header_map[key] = value;

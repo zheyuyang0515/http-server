@@ -21,6 +21,7 @@
 #include <unordered_set>
 #include <algorithm>
 #include <sys/stat.h>
+#include <vector>
 class Server {
 private:
     enum request_type {PIC, HTML};
@@ -32,6 +33,41 @@ private:
     ThreadPool *pool;   //thread pool
     static const std::unordered_map<std::string, std::string> pic_type_map;    //save all pic suffix(bmp, jpeg, png, gif, jpg, ico)
     static const std::unordered_map<std::string, std::string> text_type_map;    //save all pic suffix(html, css)
+public:
+    /**
+     * Start listening at the server socket to wait events using epoll_wait
+     */
+    void Listen();
+    //client information for epoll's data attribute
+    struct client_struct {
+        struct sockaddr_in clientaddr;
+        int client_fd;
+        int mode;    //1 from client, 2 from host/original server
+    };
+    //arg used to pass to the Task obj
+    struct task_struct {
+        struct client_struct *cs;
+        Logger *logger;
+        int epfd;
+    };
+    static bool reverse_proxy_mode;  //is reverse proxy opened?
+    static int proxy_server_num;    //totally number of servers which needs to be did proxy
+    static std::vector<std::string> ips;        //host servers' ips array
+    static std::vector<int> ports;              //host servers' ports array
+    static pthread_mutex_t reverse_proxy_client_map_mutex;
+    static pthread_mutex_t reverse_proxy_server_map_mutex;
+    static pthread_mutex_t keep_alive_map_mutex;
+    static std::unordered_map<int, int> reverse_proxy_client_map;  //recv-send map
+    static std::unordered_map<int, int> reverse_proxy_server_map;  //send-recv map
+    static std::unordered_map<int, time_t> keep_alive_map;    //save a keep-alive client and its start time
+    //read n characters from the specific client socket
+    //static int readn(char *buff, int n, struct client_struct *cs, Logger *logger, int epfd);
+    static int readn(char *buff, int n, int client_fd);
+    /**
+     * handle request
+     * @param ts: struct task_struct
+     */
+    static void handle_request(void *ts);
 public:
     struct page_struct {
         std::string main_page;
@@ -45,38 +81,25 @@ public:
      */
     Server(std::string ip, int port, int max_request, ThreadPool *pool, struct Server::page_struct ps, int max_connection);
     ~Server() {};
-public:
-    /**
-     * Start listening at the server socket to wait events using epoll_wait
-     */
-    void Listen();
-    //client information for epoll's data attribute
-    struct client_struct {
-        struct sockaddr_in clientaddr;
-        int client_fd;
-    };
-    //arg used to pass to the Task obj
-    struct task_struct {
-        struct client_struct *cs;
-        Logger *logger;
-        int epfd;
-    };
-    //read n characters from the specific client socket
-    //static int readn(char *buff, int n, struct client_struct *cs, Logger *logger, int epfd);
-    static int readn(char *buff, int n, int client_fd);
-    /**
-     * handle request
-     * @param ts: struct task_struct
-     */
-    static void handle_request(void *ts);
 private:
     struct http_header_get_struct {
         std::unordered_map<std::string, std::string> header_map;    //header information(k-v)
         std::unordered_map<std::string, std::string> arg_map;       //argument in the url(k-v): this map is not being used currently
     };
-    static void free_http_header_get_struct(struct http_header_get_struct *h) {
-        delete h;
-    }
+    /**
+     * @def: recv requests from client and dispatch to host/original server
+     * @param header_map: http header info
+     * @param send_fd: use to connect to the host/original server
+     * @param cs: client info struct
+     * @param logger: log
+     * @return 1 on success, -1 on failed
+     */
+    static int dispatch_request(std::unordered_map<std::string, std::string> header_map, int send_fd, struct client_struct *cs, Logger *logger);
+    struct dispatch_response_task_struct {
+        struct client_struct *cs;
+        Logger *logger;
+    };
+    static void dispatch_response(void *arg);
      /**
       * @def parse http header information, and store the information in two hashmaps
       * @param header_struct: store the header result

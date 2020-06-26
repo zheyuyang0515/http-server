@@ -10,6 +10,7 @@
 #include "../logger/Log.h"
 #include <iostream>
 #include <sys/sysinfo.h>
+#include <vector>
 #define LOG_DIR "logs/log"
 #define CONF_DIR "conf/server.xml"
 
@@ -38,6 +39,10 @@ public:
         float add_worker_rate;
         float delete_worker_rate;
         Log::Level severity_ignore;
+        bool reverse_proxy_mode = false;
+        int host_num;
+        std::vector<std::string> host_ips;
+        std::vector<int> host_ports;
     };
     /**
      * @def add a node to the tail of the queue

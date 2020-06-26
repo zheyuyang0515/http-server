@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <server>
+    <!--General Information-->
     <general>
         <listen-ip>192.168.1.111</listen-ip>
         <listen-port>8686</listen-port>
         <max-connection>128</max-connection>
         <max-request>2048</max-request>
     </general>
+    <!--Workers in Thread Pool-->
     <worker>
         <min-worker>4</min-worker>
         <max-worker>4</max-worker>
@@ -14,11 +16,20 @@
         <add-worker-rate>0.8</add-worker-rate>
         <delete-worker-rate>0.3</delete-worker-rate>
     </worker>
+    <!--Page-->
     <page>
         <main-page>index.html</main-page>
         <error-404-page>404.html</error-404-page>
     </page>
+    <!--Log-->
     <log>
         <severity-ignore>0</severity-ignore>
     </log>
+    <!--Reverse Proxy-->
+    <proxy>
+        <host>
+            <ip>172.217.1.100</ip>
+            <port>80</port>
+        </host>
+    </proxy>
 </server>
