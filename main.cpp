@@ -5,6 +5,7 @@
 pthread_mutex_t Server::keep_alive_map_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t Server::reverse_proxy_client_map_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t Server::reverse_proxy_server_map_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t Server::proxy_host_map_mutex = PTHREAD_MUTEX_INITIALIZER;
 bool Server::reverse_proxy_mode;  //is reverse proxy opened?
 int Server::proxy_server_num;    //totally number of servers which needs to be did proxy
 std::vector<std::string> Server::ips;        //host servers' ips array
@@ -12,7 +13,7 @@ std::vector<int> Server::ports;              //host servers' ports array
 std::unordered_map<int, int> Server::reverse_proxy_client_map;  //recv-send map
 std::unordered_map<int, int> Server::reverse_proxy_server_map;  //send-recv map
 std::unordered_map<int, time_t> Server::keep_alive_map;    //save a keep-alive client and its start time
-
+std::unordered_map<int, sockaddr_in> Server::proxy_host_map;
 int main(int argc, char* argv[]) {
     int ret = -1;
     struct Utility::init_struct is;
@@ -30,7 +31,6 @@ int main(int argc, char* argv[]) {
     ps.error_404_page = is.error_404_page;
     ps.main_page = is.main_page;
     Server *server = new Server(is.ip, is.port, is.max_request, pool, ps, is.max_connection);
-    //std::cout << is.reverse_proxy_mode << std::endl;
     if(is.reverse_proxy_mode) {
         //switch mode to proxy
         Server::reverse_proxy_mode = true;

@@ -57,9 +57,11 @@ public:
     static pthread_mutex_t reverse_proxy_client_map_mutex;
     static pthread_mutex_t reverse_proxy_server_map_mutex;
     static pthread_mutex_t keep_alive_map_mutex;
+    static pthread_mutex_t proxy_host_map_mutex;
     static std::unordered_map<int, int> reverse_proxy_client_map;  //recv-send map
     static std::unordered_map<int, int> reverse_proxy_server_map;  //send-recv map
     static std::unordered_map<int, time_t> keep_alive_map;    //save a keep-alive client and its start time
+    static std::unordered_map<int, sockaddr_in> proxy_host_map; //save the host server info for each client
     //read n characters from the specific client socket
     //static int readn(char *buff, int n, struct client_struct *cs, Logger *logger, int epfd);
     static int readn(char *buff, int n, int client_fd);

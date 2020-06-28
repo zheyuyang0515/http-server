@@ -28,6 +28,10 @@
     <!--Reverse Proxy-->
     <proxy>
         <host>
+            <ip>142.250.64.206</ip>
+            <port>80</port>
+        </host>
+        <host>
             <ip>172.217.1.100</ip>
             <port>80</port>
         </host>

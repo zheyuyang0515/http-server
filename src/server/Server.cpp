@@ -216,10 +216,12 @@ void Server::Listen() {
     }
 }
 int Server::readn(char* buff, int n, int client_fd) {
+    //std::cout << "123" << std::endl;
     int nleft = n;
     int count = 0;
     while(nleft > 0) {
         if((count = recv(client_fd, buff, nleft, 0)) < 0) {
+            //std::cout << count << std::endl;
             if(errno == EINTR) {
                 count = 0;
             } else if(errno == EWOULDBLOCK || errno == EAGAIN) {
@@ -233,6 +235,7 @@ int Server::readn(char* buff, int n, int client_fd) {
         nleft -= count;
         buff += count;
     }
+    //std::cout << "456" << std::endl;
     return n - nleft;
 }
 void Server::handle_request(void *arg) {
@@ -340,6 +343,25 @@ void Server::handle_request(void *arg) {
                     result = -1;
                     break;
                 }
+                //set send-socket nonblock
+                int flags = fcntl(send_fd, F_GETFL, 0);
+                if(flags == -1) {
+                    error_msg = strerror(errno);
+                    logger->add_log(new Log("Server: Get send fd descriptor failed during dispatch request(" + std::string(error_msg) + ").", Log::ERROR));
+                    result = -1;
+                    break;
+                }
+                ret = fcntl(send_fd, F_SETFL, flags | O_NONBLOCK);
+                if(ret == -1) {
+                    error_msg = strerror(errno);
+                    logger->add_log(new Log("Server: Set socket descriptor failed during dispatch request(" + std::string(error_msg) + ").", Log::ERROR));
+                    result = -1;
+                    break;
+                }
+                //save host_server info
+                pthread_mutex_lock(&Server::proxy_host_map_mutex);
+                proxy_host_map[cs->client_fd] = server_addr;
+                pthread_mutex_unlock(&Server::proxy_host_map_mutex);
 
                 //save reverse_proxy_client_map
                 pthread_mutex_lock(&Server::reverse_proxy_client_map_mutex);
@@ -362,7 +384,7 @@ void Server::handle_request(void *arg) {
                 if(ret < 0) {
                     error_msg = strerror(errno);
                     logger->add_log(new Log("Server: Add client to epoll failed(dispatch request): " + std::string(error_msg), Log::ERROR));
-                    result = -1;
+                    result = -2;
                     break;
                 }
 
@@ -386,6 +408,9 @@ void Server::handle_request(void *arg) {
     } else if(result == -2) {   //error when interacting with host server
         close(send_fd);
         close(cs->client_fd);
+        pthread_mutex_lock(&proxy_host_map_mutex);
+        proxy_host_map.erase(cs->client_fd);
+        pthread_mutex_unlock(&proxy_host_map_mutex);
         pthread_mutex_lock(&reverse_proxy_client_map_mutex);
         reverse_proxy_client_map.erase(cs->client_fd);
         pthread_mutex_unlock(&reverse_proxy_client_map_mutex);
@@ -425,7 +450,8 @@ int Server::dispatch_request(std::unordered_map<std::string, std::string> header
         }
         //test
         if(entry.first == "Host") {
-            out_buff += "Host: 172.217.1.100:80\n";
+            //std::cout << inet_ntoa(proxy_host_map[cs->client_fd].sin_addr) << std::endl;
+            out_buff += "Host: " + std::string(inet_ntoa(proxy_host_map[cs->client_fd].sin_addr)) + "\n";
             continue;
         }
         //test
@@ -458,6 +484,12 @@ int Server::dispatch_request(std::unordered_map<std::string, std::string> header
             return -1;
         }
     }
+    /*char read_buff[2048];
+    memset(read_buff, 0, sizeof(read_buff));
+    while(recv(send_fd, read_buff, 2048, 0) >= 0) {
+        std::cout << read_buff << std::endl;
+        memset(read_buff, 0, sizeof(read_buff));
+    }*/
     return 1;
 }
 //TODO: 这个函数怕不是有问题
@@ -473,7 +505,7 @@ void Server::dispatch_response(void *arg) {
         logger->add_log(new Log("Server: Receive message from host/original server failed: client not found", Log::ERROR));
     }
     int client_fd = reverse_proxy_server_map[cs->client_fd];
-    while(ret = readn(in_buff, 1, cs->client_fd) > 0) {
+    while((ret = readn(in_buff, 1, cs->client_fd)) > 0) {
         ret = send(client_fd, in_buff, 1, 0);
         if(ret == -1) {
             break;
@@ -485,6 +517,9 @@ void Server::dispatch_response(void *arg) {
         error_msg = strerror(errno);
         close(cs->client_fd);
         close(client_fd);
+        pthread_mutex_lock(&proxy_host_map_mutex);
+        proxy_host_map.erase(client_fd);
+        pthread_mutex_unlock(&proxy_host_map_mutex);
         pthread_mutex_lock(&reverse_proxy_server_map_mutex);
         reverse_proxy_server_map.erase(cs->client_fd);
         pthread_mutex_unlock(&reverse_proxy_server_map_mutex);
@@ -492,7 +527,6 @@ void Server::dispatch_response(void *arg) {
         reverse_proxy_client_map.erase(client_fd);
         pthread_mutex_unlock(&reverse_proxy_client_map_mutex);
         logger->add_log(new Log("Server: Receive message from host/original server failed: " + std::string(error_msg), Log::ERROR));
-        return;
     }
 }
 
