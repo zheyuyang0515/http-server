@@ -25,6 +25,12 @@
 #define DEFAULT_DELETE_WORKER_RATE 0.3
 class Utility {
 public:
+    enum proxy_algorithm {round_robin, random};
+    struct host_server_struct {
+        std::string ip;
+        int port;
+        int weight;
+    };
     struct init_struct {
         std::string ip;
         int port;
@@ -41,8 +47,11 @@ public:
         Log::Level severity_ignore;
         bool reverse_proxy_mode = false;
         int host_num;
-        std::vector<std::string> host_ips;
-        std::vector<int> host_ports;
+        //std::vector<std::string> host_ips;
+        //std::vector<int> host_ports;
+        std::vector<host_server_struct *> host_server_list;
+        int total_weight;
+        proxy_algorithm proxyAlgorithm;
     };
     /**
      * @def add a node to the tail of the queue
@@ -81,5 +90,6 @@ public:
      * @return: 0 on success, -1 on error
      */
     static int parse_conf_file(struct init_struct *is);
+
 };
 #endif //HTTP_SERVER_UTILITY_H

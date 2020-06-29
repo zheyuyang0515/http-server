@@ -33,6 +33,7 @@ private:
     ThreadPool *pool;   //thread pool
     static const std::unordered_map<std::string, std::string> pic_type_map;    //save all pic suffix(bmp, jpeg, png, gif, jpg, ico)
     static const std::unordered_map<std::string, std::string> text_type_map;    //save all pic suffix(html, css)
+    static int get_random_host();
 public:
     /**
      * Start listening at the server socket to wait events using epoll_wait
@@ -50,10 +51,12 @@ public:
         Logger *logger;
         int epfd;
     };
+
     static bool reverse_proxy_mode;  //is reverse proxy opened?
     static int proxy_server_num;    //totally number of servers which needs to be did proxy
-    static std::vector<std::string> ips;        //host servers' ips array
-    static std::vector<int> ports;              //host servers' ports array
+    //static std::vector<std::string> ips;        //host servers' ips array
+    //static std::vector<int> ports;              //host servers' ports array
+    static std::vector<Utility::host_server_struct *> host_server_list;              //host servers' ports array
     static pthread_mutex_t reverse_proxy_client_map_mutex;
     static pthread_mutex_t reverse_proxy_server_map_mutex;
     static pthread_mutex_t keep_alive_map_mutex;
@@ -62,6 +65,10 @@ public:
     static std::unordered_map<int, int> reverse_proxy_server_map;  //send-recv map
     static std::unordered_map<int, time_t> keep_alive_map;    //save a keep-alive client and its start time
     static std::unordered_map<int, sockaddr_in> proxy_host_map; //save the host server info for each client
+    static int total_weight;
+    static Utility::proxy_algorithm proxyAlgorithm;
+    static int round_ptr;       //pointer used to do round robin algorithm proxy
+    static int round_ctr;       //counter used to do round robin algorithm proxy
     //read n characters from the specific client socket
     //static int readn(char *buff, int n, struct client_struct *cs, Logger *logger, int epfd);
     static int readn(char *buff, int n, int client_fd);

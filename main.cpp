@@ -8,13 +8,17 @@ pthread_mutex_t Server::reverse_proxy_server_map_mutex = PTHREAD_MUTEX_INITIALIZ
 pthread_mutex_t Server::proxy_host_map_mutex = PTHREAD_MUTEX_INITIALIZER;
 bool Server::reverse_proxy_mode;  //is reverse proxy opened?
 int Server::proxy_server_num;    //totally number of servers which needs to be did proxy
-std::vector<std::string> Server::ips;        //host servers' ips array
-std::vector<int> Server::ports;              //host servers' ports array
+//std::vector<std::string> Server::ips;        //host servers' ips array
+//std::vector<int> Server::ports;              //host servers' ports array
+std::vector<Utility::host_server_struct *> Server::host_server_list;
 std::unordered_map<int, int> Server::reverse_proxy_client_map;  //recv-send map
 std::unordered_map<int, int> Server::reverse_proxy_server_map;  //send-recv map
 std::unordered_map<int, time_t> Server::keep_alive_map;    //save a keep-alive client and its start time
 std::unordered_map<int, sockaddr_in> Server::proxy_host_map;
+Utility::proxy_algorithm Server::proxyAlgorithm;
+int Server::total_weight;
 int main(int argc, char* argv[]) {
+    //chdir("../");
     int ret = -1;
     struct Utility::init_struct is;
     //read config file and set corresponding attributes in the memory
@@ -37,11 +41,17 @@ int main(int argc, char* argv[]) {
         //init reverse proxy related data structure.
         Server::proxy_server_num = is.host_num;
         for(int i = 0; i < Server::proxy_server_num; ++i) {
-            Server::ips.push_back(is.host_ips[i]);
-            Server::ports.push_back(is.host_ports[i]);
+            Server::host_server_list.push_back(is.host_server_list[i]);
         }
+        Server::total_weight = is.total_weight;
+        Server::proxyAlgorithm = is.proxyAlgorithm;
     } else {
         Server::reverse_proxy_mode = false;
+    }
+    //running on the background and ignore output
+    if(daemon(1, 0) < 0) {
+        perror("Server running on the background failed");
+        return -1;
     }
     //start server
     server->Listen();

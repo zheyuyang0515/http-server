@@ -9,6 +9,7 @@ int Utility::parse_conf_file(struct init_struct *is) {
     tinyxml2::XMLElement *element = nullptr;
     tinyxml2::XMLElement *children = nullptr;
     tinyxml2::XMLElement *sub_children = nullptr;
+    is->proxyAlgorithm= random;
     int ret = -1;
     ret = doc.LoadFile(CONF_DIR);
     if(ret != 0) {
@@ -164,22 +165,54 @@ int Utility::parse_conf_file(struct init_struct *is) {
     //proxy
     element = root->FirstChildElement("proxy");
     is->host_num = 0;
+    const tinyxml2::XMLAttribute *attr = element->FirstAttribute();
+    if(attr != nullptr && strcmp(attr->Name(), "algorithm") != 0) {
+        std::cerr << "Config file format error: node 'proxy': attribute '" << attr->Name() << "' is not valid" << std::endl;
+        return -1;
+    }
+    //check algorithm type
+    if(attr != nullptr && strcmp(attr->Value(), "round robin") == 0) {
+        is->proxyAlgorithm = round_robin;
+    } else if(attr != nullptr && strcmp(attr->Value(), "random") == 0) {
+        is->proxyAlgorithm = random;
+    } else if(attr != nullptr) {
+        std::cerr << "Config file format error: node 'proxy': attribute 'algorithm' value '" << attr->Value() << "' is not valid" << std::endl;
+        return -1;
+    }
     if(element != nullptr) {
+        is->total_weight = 0;
         //host
         children = element->FirstChildElement("host");
         while(children != nullptr) {
+            int weight = 1;
+            const tinyxml2::XMLAttribute *attr = children->FirstAttribute();
+            if(attr != nullptr && strcmp(attr->Name(), "weight") != 0) {
+                std::cerr << "Config file format error: node 'host': attribute '" << attr->Name() << "' is not valid" << std::endl;
+                return -1;
+            }
+            if(attr != nullptr) {
+                weight = std::stoi(attr->Value());
+            }
+            is->total_weight += weight;
+            std::string host_ip;
+            int host_port;
             sub_children = children->FirstChildElement("ip");
             if(sub_children == nullptr) {
                 std::cerr << "Config file format error: node 'host': 'ip' node in node 'host' is required." << std::endl;
                 return -1;
             }
-            is->host_ips.push_back(sub_children->GetText());
+            host_ip = sub_children->GetText();
             sub_children = children->FirstChildElement("port");
             if(sub_children == nullptr) {
                 std::cerr << "Config file format error: node 'host': 'port' node in node 'host' is required." << std::endl;
                 return -1;
             }
-            is->host_ports.push_back(std::stoi(sub_children->GetText()));
+            host_port = std::stoi(sub_children->GetText());
+            struct host_server_struct *hs = new host_server_struct;
+            hs->ip = host_ip;
+            hs->weight = weight;
+            hs->port = host_port;
+            is->host_server_list.push_back(hs);
             is->host_num++;
             children = children->NextSiblingElement();
         }

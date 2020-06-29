@@ -25,8 +25,19 @@
     <log>
         <severity-ignore>0</severity-ignore>
     </log>
-    <!--Reverse Proxy-->
-    <proxy>
+    <!--Reverse Proxy(random algorithm)-->
+    <proxy algorithm = "random">
+        <host weight = "1">
+            <ip>142.250.64.206</ip>
+            <port>80</port>
+        </host>
+        <host weight = "1">
+            <ip>172.217.1.100</ip>
+            <port>80</port>
+        </host>
+    </proxy>
+    <!--Reverse Proxy(Round Robin)-->
+    <!--<proxy algorithm = "round robin">
         <host>
             <ip>142.250.64.206</ip>
             <port>80</port>
@@ -35,5 +46,5 @@
             <ip>172.217.1.100</ip>
             <port>80</port>
         </host>
-    </proxy>
+    </proxy>-->
 </server>

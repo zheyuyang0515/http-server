@@ -9,6 +9,8 @@
 //init pic_type
 const std::unordered_map<std::string, std::string> Server::pic_type_map {{"jpg", "image/jpg"}, {"jpeg", "image/jpeg"}, {"gif", "image/gif"}, {"ico", "image/ico"}, {"png", "image/png"}, {"bmp", "image/bmp"}};
 const std::unordered_map<std::string, std::string> Server::text_type_map {{"html", "text/html"}, {"css", "text/css"}, {"js", "application/javascript"}};
+int Server::round_ptr;
+int Server::round_ctr;
 Server::Server(std::string ip, int port, int max_request, ThreadPool *pool, struct page_struct ps, int max_connection) {
     this->max_request = max_request;
     this->pool = pool;
@@ -19,6 +21,12 @@ Server::Server(std::string ip, int port, int max_request, ThreadPool *pool, stru
     int opt_status = 1;        //option used in setsockopt()
     //initiate logger obj
     logger = Logger::get_instance(LOG_DIR, Log::ALL);
+    //set proxy_algorithm
+    if(reverse_proxy_mode == true) {
+        round_ctr = 0;
+        round_ptr = 0;
+    }
+
 
     //create server socket
     socket_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -319,7 +327,7 @@ void Server::handle_request(void *arg) {
                 close(cs->client_fd);
             }
         } while(false);
-    } else {    //TODO: reverse proxy service is on
+    } else {
         do{
             //if keep-alive then use last fd
             if(keep_alive_map.count(cs->client_fd) > 0) {
@@ -327,13 +335,12 @@ void Server::handle_request(void *arg) {
             } else {    //create new fd to connect to the server;
                 send_fd = socket(AF_INET, SOCK_STREAM, 0);
                 //random choose a host/original server
-                srand((unsigned)time(NULL));
-                int host_index = rand() % proxy_server_num;
+                int host_index = get_random_host();
                 //connect to that server
                 struct sockaddr_in server_addr;
                 server_addr.sin_family = AF_INET;
-                server_addr.sin_addr.s_addr = inet_addr(ips[host_index].c_str());
-                server_addr.sin_port = htons(ports[host_index]);
+                server_addr.sin_addr.s_addr = inet_addr(host_server_list[host_index]->ip.c_str());
+                server_addr.sin_port = htons(host_server_list[host_index]->port);
                 ret = connect(send_fd,
                               (struct sockaddr *)&server_addr,
                               sizeof(struct sockaddr));
@@ -450,7 +457,6 @@ int Server::dispatch_request(std::unordered_map<std::string, std::string> header
         }
         //test
         if(entry.first == "Host") {
-            //std::cout << inet_ntoa(proxy_host_map[cs->client_fd].sin_addr) << std::endl;
             out_buff += "Host: " + std::string(inet_ntoa(proxy_host_map[cs->client_fd].sin_addr)) + "\n";
             continue;
         }
@@ -484,15 +490,8 @@ int Server::dispatch_request(std::unordered_map<std::string, std::string> header
             return -1;
         }
     }
-    /*char read_buff[2048];
-    memset(read_buff, 0, sizeof(read_buff));
-    while(recv(send_fd, read_buff, 2048, 0) >= 0) {
-        std::cout << read_buff << std::endl;
-        memset(read_buff, 0, sizeof(read_buff));
-    }*/
     return 1;
 }
-//TODO: 这个函数怕不是有问题
 void Server::dispatch_response(void *arg) {
     struct dispatch_response_task_struct *drts = (struct dispatch_response_task_struct *)arg;
     struct client_struct *cs = drts->cs;
@@ -846,4 +845,37 @@ int Server::http_response(std::string dir, std::unordered_map<std::string, std::
     in.close();
     //std::cout << "http_response end" << std::endl;
     return result;
+}
+
+int Server::get_random_host() {
+    srand((unsigned)time(NULL));
+    int host_index;
+    int weight;
+    if(proxyAlgorithm == Utility::random) {
+        weight = rand() % (total_weight + 1);
+        //std::cout << weight << std::endl;
+        for(int i = 0; i < proxy_server_num; i++) {
+            auto host = host_server_list[i];
+            weight -= host->weight;
+            if(weight <= 0) {
+                return i;
+            }
+        }
+    } else if(proxyAlgorithm == Utility::round_robin){
+        host_index = round_ptr;
+        round_ctr++;
+        if(round_ctr > host_server_list[round_ptr]->weight) {
+            round_ctr = 0;
+            round_ptr++;
+            if(round_ptr >= proxy_server_num) {
+                round_ptr = 0;
+                round_ctr = 0;
+            }
+        }
+        return host_index;
+    }
+    return -1;
+
+
+
 }
