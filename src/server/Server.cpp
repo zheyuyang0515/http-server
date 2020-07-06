@@ -123,6 +123,7 @@ void Server::Listen() {
 
     while(true) {
         event_sum = epoll_wait(epfd, events, max_request, -1);
+        //std::cout << event_sum << std::endl;
         //no events found
         if(event_sum == 0) {
             continue;
@@ -205,7 +206,9 @@ void Server::Listen() {
                     Task *task = new Task(Server::handle_request, ts);
                     //add task to the queue
                     pool->add_task(task);
-                } else {            //reverse proxy
+                } else if(((struct client_struct *)events[i].data.ptr)->mode == 2) {            //reverse proxy
+                    //std::cout << "reverse" << std::endl;
+                    //std::cout << "response received from host" << ((struct client_struct *)events[i].data.ptr)->client_fd << std::endl;
                     struct dispatch_response_task_struct *drts = new dispatch_response_task_struct;
                     drts->logger = logger;
                     drts->cs = new client_struct();
@@ -329,7 +332,7 @@ void Server::handle_request(void *arg) {
         } while(false);
     } else {
         do{
-            //if keep-alive then use last fd
+            //if client fd exist then use the previous one(keep-alive)
             if(keep_alive_map.count(cs->client_fd) > 0) {
                 send_fd = reverse_proxy_client_map[cs->client_fd];
             } else {    //create new fd to connect to the server;
@@ -405,14 +408,37 @@ void Server::handle_request(void *arg) {
                     error_msg = strerror(errno);
                     logger->add_log(new Log("Server: Delete client from epoll failed(dispatch request): " + std::string(error_msg), Log::WARNING));
                 }
-                result = -2;
-                break;
+                close(send_fd);
+                close(cs->client_fd);
+                pthread_mutex_lock(&proxy_host_map_mutex);
+                proxy_host_map.erase(cs->client_fd);
+                pthread_mutex_unlock(&proxy_host_map_mutex);
+                pthread_mutex_lock(&reverse_proxy_client_map_mutex);
+                reverse_proxy_client_map.erase(cs->client_fd);
+                pthread_mutex_unlock(&reverse_proxy_client_map_mutex);
+                pthread_mutex_lock(&reverse_proxy_server_map_mutex);
+                reverse_proxy_server_map.erase(send_fd);
+                pthread_mutex_unlock(&reverse_proxy_server_map_mutex);
+                if(keep_alive_map.count(cs->client_fd) > 0) {
+                    pthread_mutex_lock(&keep_alive_map_mutex);
+                    keep_alive_map.erase(cs->client_fd);
+                    pthread_mutex_unlock(&keep_alive_map_mutex);
+                }
+                continue;
             }
+            //write log save client's info
+            std::string req_method = header_struct.header_map.count("req_method") > 0 ? header_struct.header_map["req_method"] : "UNKNOWN";
+            std::string req_url = header_struct.header_map.count("req_url") > 0 ? header_struct.header_map["req_url"] : "UNKNOWN";
+            std::string user_agent = header_struct.header_map.count("User-Agent") > 0 ? header_struct.header_map["User-Agent"] : "UNKNOWN";
+            logger->add_log(new Log("Server: New Request " + req_method + " " + req_url + " from: " + std::string(inet_ntoa(cs->clientaddr.sin_addr)) + ". Browser: " + user_agent + ".", Log::DEBUG));
         } while(false);
     }
     if(result == -1) {  //error when interacting with client
+        std::cout << "error -1" << std::endl;
         close(cs->client_fd);
+        close(send_fd);
     } else if(result == -2) {   //error when interacting with host server
+        std::cout << "error -2" << std::endl;
         close(send_fd);
         close(cs->client_fd);
         pthread_mutex_lock(&proxy_host_map_mutex);
@@ -443,9 +469,10 @@ void Server::handle_request(void *arg) {
     delete ts;
 }
 int Server::dispatch_request(std::unordered_map<std::string, std::string> header_map, int send_fd, struct client_struct *cs, Logger *logger) {
+    //std::cout << "start" << std::endl;
     std::string out_buff;
-    int ret = -1;
     char *errormsg;
+    int ret = -1;
     char in_buff[1];
     //header
     //first line
@@ -464,6 +491,7 @@ int Server::dispatch_request(std::unordered_map<std::string, std::string> header
         out_buff += entry.first + ": " + entry.second + "\n";
     }
     out_buff += "\n";
+    //std::cout << out_buff << std::endl;
     ret = send(send_fd, out_buff.c_str(), out_buff.length(), 0);
     if(ret == -1) {
         errormsg = strerror(errno);
@@ -490,9 +518,11 @@ int Server::dispatch_request(std::unordered_map<std::string, std::string> header
             return -1;
         }
     }
+    //std::cout << "finish" << std::endl;
     return 1;
 }
 void Server::dispatch_response(void *arg) {
+    //std::cout << "start" << std::endl;
     struct dispatch_response_task_struct *drts = (struct dispatch_response_task_struct *)arg;
     struct client_struct *cs = drts->cs;
     Logger *logger = drts->logger;
@@ -502,6 +532,7 @@ void Server::dispatch_response(void *arg) {
     memset(in_buff, 0, sizeof(in_buff));
     if(reverse_proxy_server_map.count(cs->client_fd) == 0) {
         logger->add_log(new Log("Server: Receive message from host/original server failed: client not found", Log::ERROR));
+        return;
     }
     int client_fd = reverse_proxy_server_map[cs->client_fd];
     while((ret = readn(in_buff, 1, cs->client_fd)) > 0) {
@@ -511,8 +542,11 @@ void Server::dispatch_response(void *arg) {
         }
         memset(in_buff, 0, sizeof(in_buff));
     }
+    if(ret == -2) {
+        return;
+    }
     //error, close
-    if(ret == -1) {
+    if(ret <= 0) {
         error_msg = strerror(errno);
         close(cs->client_fd);
         close(client_fd);
@@ -525,7 +559,17 @@ void Server::dispatch_response(void *arg) {
         pthread_mutex_lock(&reverse_proxy_client_map_mutex);
         reverse_proxy_client_map.erase(client_fd);
         pthread_mutex_unlock(&reverse_proxy_client_map_mutex);
-        logger->add_log(new Log("Server: Receive message from host/original server failed: " + std::string(error_msg), Log::ERROR));
+        if(keep_alive_map.count(client_fd) > 0) {
+            pthread_mutex_lock(&keep_alive_map_mutex);
+            keep_alive_map.erase(client_fd);
+            pthread_mutex_unlock(&keep_alive_map_mutex);
+        }
+        if(ret == -1) {
+            logger->add_log(new Log("Server: Receive message from host/original server failed: " + std::string(error_msg), Log::ERROR));
+        } else {
+            logger->add_log(new Log("Server: Client disconnect: " + std::string(error_msg), Log::INFO));
+        }
+        //std::cout << "disconnect" << std::endl;
     }
 }
 

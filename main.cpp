@@ -19,6 +19,11 @@ Utility::proxy_algorithm Server::proxyAlgorithm;
 int Server::total_weight;
 int main(int argc, char* argv[]) {
     //chdir("../");
+    //running on the background and ignore output
+    /*if(daemon(1, 0) < 0) {
+        perror("Server running on the background failed");
+        return -1;
+    }*/
     int ret = -1;
     struct Utility::init_struct is;
     //read config file and set corresponding attributes in the memory
@@ -47,11 +52,6 @@ int main(int argc, char* argv[]) {
         Server::proxyAlgorithm = is.proxyAlgorithm;
     } else {
         Server::reverse_proxy_mode = false;
-    }
-    //running on the background and ignore output
-    if(daemon(1, 0) < 0) {
-        perror("Server running on the background failed");
-        return -1;
     }
     //start server
     server->Listen();
