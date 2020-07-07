@@ -1,6 +1,6 @@
 # Http Web Server
 ## 1. Description
-A http web server written in C++ which provides static resources support. It could enable users deploying their own static web pages. Furthermore it could also provide reverse proxy service for the server side.
+A http web server written in C++ which provides services for static resources. It could enable users deploying their own static web pages. Furthermore it could also provide reverse proxy service for the server side.
 This web server was powered by epoll under Linux operating system. Leveraging dynamic thread pool to accelerate efficiency and take advantage of hardware(physical machines) resource effectively.
 ## 2. Step to run the server
 - Start the server  
