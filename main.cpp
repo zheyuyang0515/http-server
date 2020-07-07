@@ -17,6 +17,7 @@ std::unordered_map<int, time_t> Server::keep_alive_map;    //save a keep-alive c
 std::unordered_map<int, sockaddr_in> Server::proxy_host_map;
 Utility::proxy_algorithm Server::proxyAlgorithm;
 int Server::total_weight;
+std::unordered_set<std::string> Server::proxy_suffix_set;
 int main(int argc, char* argv[]) {
     //chdir("../");
     //running on the background and ignore output
@@ -50,6 +51,10 @@ int main(int argc, char* argv[]) {
         }
         Server::total_weight = is.total_weight;
         Server::proxyAlgorithm = is.proxyAlgorithm;
+        //init proxy suffix
+        for(auto i = 0; i < is.proxy_suffix_list.size(); ++i) {
+            Server::proxy_suffix_set.insert(is.proxy_suffix_list[i]);
+        }
     } else {
         Server::reverse_proxy_mode = false;
     }

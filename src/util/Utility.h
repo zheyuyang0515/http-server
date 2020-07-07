@@ -52,6 +52,7 @@ public:
         std::vector<host_server_struct *> host_server_list;
         int total_weight;
         proxy_algorithm proxyAlgorithm;
+        std::vector<std::string> proxy_suffix_list;
     };
     /**
      * @def add a node to the tail of the queue

@@ -166,19 +166,46 @@ int Utility::parse_conf_file(struct init_struct *is) {
     element = root->FirstChildElement("proxy");
     is->host_num = 0;
     const tinyxml2::XMLAttribute *attr = element->FirstAttribute();
-    if(attr != nullptr && strcmp(attr->Name(), "algorithm") != 0) {
-        std::cerr << "Config file format error: node 'proxy': attribute '" << attr->Name() << "' is not valid" << std::endl;
-        return -1;
+    while(attr != nullptr) {
+        if(strcmp(attr->Name(), "algorithm") != 0 && strcmp(attr->Name(), "suffix") != 0) {
+            std::cerr << "Config file format error: node 'proxy': attribute '" << attr->Name() << "' is not valid" << std::endl;
+            return -1;
+        }
+        //algorithm
+        if(strcmp(attr->Name(), "algorithm") == 0) {
+            //check algorithm type
+            if(attr != nullptr && strcmp(attr->Value(), "round robin") == 0) {
+                is->proxyAlgorithm = round_robin;
+            } else if(attr != nullptr && strcmp(attr->Value(), "random") == 0) {
+                is->proxyAlgorithm = random;
+            } else if(attr != nullptr) {
+                std::cerr << "Config file format error: node 'proxy': attribute 'algorithm' value '" << attr->Value() << "' is not valid" << std::endl;
+                return -1;
+            }
+        } else if(strcmp(attr->Name(), "suffix") == 0) {   //suffix
+            std::string value = attr->Value();
+            //parse suffix
+            std::string single_suffix = "";
+            for(auto i = 0; i < value.length(); ++i) {
+                if(value[i] == '|') {
+                    if(single_suffix.length() > 0) {
+                        is->proxy_suffix_list.push_back(single_suffix);
+                        single_suffix.clear();
+                    }
+                } else {
+                    single_suffix += value[i];
+                }
+            }
+            //last one
+            if(single_suffix.length() > 0) {
+                is->proxy_suffix_list.push_back(single_suffix);
+                //single_suffix.clear();
+            }
+        }
+        attr = attr->Next();
     }
-    //check algorithm type
-    if(attr != nullptr && strcmp(attr->Value(), "round robin") == 0) {
-        is->proxyAlgorithm = round_robin;
-    } else if(attr != nullptr && strcmp(attr->Value(), "random") == 0) {
-        is->proxyAlgorithm = random;
-    } else if(attr != nullptr) {
-        std::cerr << "Config file format error: node 'proxy': attribute 'algorithm' value '" << attr->Value() << "' is not valid" << std::endl;
-        return -1;
-    }
+
+
     if(element != nullptr) {
         is->total_weight = 0;
         //host

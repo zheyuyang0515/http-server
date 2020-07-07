@@ -69,6 +69,7 @@ public:
     static Utility::proxy_algorithm proxyAlgorithm;
     static int round_ptr;       //pointer used to do round robin algorithm proxy
     static int round_ctr;       //counter used to do round robin algorithm proxy
+    static std::unordered_set<std::string> proxy_suffix_set;    //save the all suffixes of static resources(which need to be cached)
     //read n characters from the specific client socket
     //static int readn(char *buff, int n, struct client_struct *cs, Logger *logger, int epfd);
     static int readn(char *buff, int n, int client_fd);

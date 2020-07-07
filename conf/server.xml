@@ -26,7 +26,7 @@
         <severity-ignore>0</severity-ignore>
     </log>
     <!--Reverse Proxy(random algorithm)-->
-    <proxy algorithm = "random">
+    <proxy algorithm = "random" suffix = "jpg|jpeg|gif|html|css|png|bmp">
         <host weight = "1">
             <ip>54.244.49.29</ip>
             <port>8080</port>
